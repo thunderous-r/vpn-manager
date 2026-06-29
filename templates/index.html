@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>VPN Manager</title>
+</head>
+
+<body>
+
+<h1>VPN Manager</h1>
+
+<h2>Users</h2>
+
+<pre id="users">Loading...</pre>
+
+<script>
+fetch("/api/users")
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById("users").textContent =
+            JSON.stringify(data, null, 2);
+    });
+</script>
+
+</body>
+
+</html>

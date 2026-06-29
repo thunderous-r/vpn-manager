@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime data
+users.json
+base.json
+
+# Temporary files
+*.bak
+*.tmp
+config.new.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+.env
