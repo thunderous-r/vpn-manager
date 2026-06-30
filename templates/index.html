@@ -1,26 +1,256 @@
 <!doctype html>
-<html>
+<html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <title>VPN Manager</title>
+<meta charset="utf-8">
+
+<title>VPN Manager</title>
+
+<style>
+
+body{
+    font-family: Arial, sans-serif;
+    margin:40px;
+    background:#f5f5f5;
+}
+
+h1{
+    margin-top:0;
+}
+
+.card{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    margin-bottom:20px;
+}
+
+input{
+    padding:8px;
+    font-size:14px;
+}
+
+button{
+    padding:8px 14px;
+    cursor:pointer;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:white;
+}
+
+th,td{
+    border:1px solid #ddd;
+    padding:10px;
+    text-align:left;
+}
+
+th{
+    background:#f0f0f0;
+}
+
+.status-enabled{
+    color:green;
+    font-weight:bold;
+}
+
+.status-disabled{
+    color:red;
+    font-weight:bold;
+}
+
+.actions button{
+    margin-right:5px;
+}
+
+.subscription{
+    max-width:350px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    font-size:12px;
+    color:#666;
+}
+
+</style>
+
 </head>
 
 <body>
 
 <h1>VPN Manager</h1>
 
+<div class="card">
+
+<h2>Create user</h2>
+
+<input
+    id="username"
+    placeholder="Username">
+
+<button onclick="createUser()">
+Create
+</button>
+
+</div>
+
+<div class="card">
+
 <h2>Users</h2>
 
-<pre id="users">Loading...</pre>
+<table>
+
+<thead>
+
+<tr>
+<th>User</th>
+<th>Status</th>
+<th>Subscription</th>
+<th>Actions</th>
+</tr>
+
+</thead>
+
+<tbody id="users">
+
+</tbody>
+
+</table>
+
+</div>
 
 <script>
-fetch("/api/users")
-    .then(r => r.json())
-    .then(data => {
-        document.getElementById("users").textContent =
-            JSON.stringify(data, null, 2);
+
+async function loadUsers(){
+
+    const users = await fetch("/api/users")
+        .then(r=>r.json());
+
+    const tbody=document.getElementById("users");
+
+    tbody.innerHTML="";
+
+    for(const [name,user] of Object.entries(users)){
+
+        const sub =
+            location.origin +
+            "/sub/" +
+            user.token;
+
+        tbody.innerHTML += `
+<tr>
+
+<td>${name}</td>
+
+<td class="${user.enabled ? "status-enabled":"status-disabled"}">
+${user.enabled ? "Enabled":"Disabled"}
+</td>
+
+<td class="subscription">
+${sub}
+</td>
+
+<td class="actions">
+
+<button onclick="copySubscription('${sub}')">
+Copy
+</button>
+
+<button onclick="toggleUser('${name}', ${user.enabled})">
+${user.enabled ? "Disable":"Enable"}
+</button>
+
+<button onclick="deleteUser('${name}')">
+Delete
+</button>
+
+</td>
+
+</tr>
+`;
+    }
+
+}
+
+async function createUser(){
+
+    const input=document.getElementById("username");
+
+    const name=input.value.trim();
+
+    if(name===""){
+        alert("Enter username");
+        return;
+    }
+
+    const r=await fetch("/api/user/create",{
+
+        method:"POST",
+
+        headers:{
+            "Content-Type":"application/json"
+        },
+
+        body:JSON.stringify({
+            name:name
+        })
+
     });
+
+    if(!r.ok){
+
+        alert(await r.text());
+
+        return;
+    }
+
+    input.value="";
+
+    loadUsers();
+
+}
+
+async function deleteUser(name){
+
+    if(!confirm("Delete "+name+" ?"))
+        return;
+
+    await fetch("/api/user/"+encodeURIComponent(name),{
+
+        method:"DELETE"
+
+    });
+
+    loadUsers();
+
+}
+
+async function toggleUser(name,enabled){
+
+    await fetch(
+        "/api/users/"+encodeURIComponent(name)+"/"+(enabled?"disable":"enable"),
+        {
+            method:"POST"
+        }
+    );
+
+    loadUsers();
+
+}
+
+async function copySubscription(text){
+
+    await navigator.clipboard.writeText(text);
+
+    alert("Subscription copied");
+
+}
+
+loadUsers();
+
 </script>
 
 </body>

@@ -33,7 +33,7 @@ def apply_config():
 
     subprocess.run(
         [
-            "sudo",
+            "/usr/bin/sudo",
             sys.executable,
             "/opt/vpn-manager/deploy.py"
         ],
