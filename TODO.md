@@ -12,14 +12,14 @@
 
 ## UI
 
-- [ ] Enable button
-- [ ] Disable button
-- [ ] Delete confirmation
+- [x] Enable button
+- [x] Disable button
+- [x] Delete confirmation
 - [ ] QR codes
 
 ## Infrastructure
 
-- [ ] systemd service
+- [x] systemd service
 - [ ] nginx reverse proxy
 - [ ] HTTPS
 - [ ] backup users.json
