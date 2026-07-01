@@ -135,10 +135,7 @@ async function loadUsers(){
 
     for(const [name,user] of Object.entries(users)){
 
-        const sub =
-            location.origin +
-            "/sub/" +
-            user.token;
+        const sub = user.subscription;
 
         tbody.innerHTML += `
 <tr>
