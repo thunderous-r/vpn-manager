@@ -9,7 +9,7 @@ import secrets
 import subprocess
 import sys
 from pathlib import Path
-from links import build_vless_uri, build_hy2_uri
+from links import build_vless_uri, build_hy2_uri, build_subscription_url
 
 app = FastAPI(title="VPN Manager")
 
@@ -75,7 +75,12 @@ def admin(request: Request):
 
 @app.get("/api/users")
 def get_users():
-    return load_users()
+    users = load_users()
+
+    for user in users.values():
+        user["subscription"] = build_subscription_url(user["token"])
+
+    return users
 
 
 @app.post("/api/user/create")
@@ -102,7 +107,7 @@ def create_user(req: UserCreate):
     save_users(users)
 
     apply_config()
-
+    
     return {
         **user,
         "vless_uri": build_vless_uri(
@@ -113,8 +118,7 @@ def create_user(req: UserCreate):
             user["hy2_password"],
             req.name
         ),
-        "subscription":
-        f"https://do.donothing.dynv6.net/sub/{token}"
+        "subscription": build_subscription_url(token)
     }
 
 

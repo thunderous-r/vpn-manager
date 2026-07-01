@@ -15,7 +15,7 @@ def build_vless_uri(uuid: str, name: str):
 
     return (
         f"vless://{uuid}"
-        f"@do.donothing.dynv6.net:443"
+        f"@{base['reality']['domain']}:{base['reality']['listen_port']}"
         f"?security=reality"
         f"&sni={base['reality']['server_name']}"
         f"&fp=chrome"
@@ -23,7 +23,7 @@ def build_vless_uri(uuid: str, name: str):
         f"&sid={base['reality']['short_id']}"
         f"&type=tcp"
         f"&encryption=none"
-        f"#FRA-Reality-{name}"
+        f"#{base['meta']['location']}-Reality-{name}"
     )
 
 
@@ -32,7 +32,19 @@ def build_hy2_uri(password: str, name: str):
 
     return (
         f"hy2://{password}"
-        f"@{base['hy2']['domain']}:8443/"
+        f"@{base['hy2']['domain']}:{base['hy2']['listen_port']}/"
         f"?sni={base['hy2']['domain']}"
-        f"#FRA-HY2-{name}"
+        f"#{base['meta']['location']}-HY2-{name}"
+    )
+
+
+def build_subscription_url(token: str):
+    base = load_base()
+
+    panel = base["panel"]
+
+    return (
+        f"https://{panel['domain']}"
+        f":{panel['port']}"
+        f"/sub/{token}"
     )
