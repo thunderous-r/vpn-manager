@@ -1,11 +1,9 @@
 import json
-from pathlib import Path
-
-BASE_FILE = Path("/opt/vpn-manager/base.json")
+from config import BASE_FILE
 
 
 def load_base():
-    return json.loads(BASE_FILE.read_text())
+    return json.loads(BASE_FILE.read_text(encoding="utf-8"))
 
 
 def build_vless_uri(uuid: str, name: str):
