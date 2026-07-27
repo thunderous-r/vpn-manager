@@ -1,11 +1,9 @@
 import json
-from pathlib import Path
-
-BASE_FILE = Path("/opt/vpn-manager/base.json")
+from config import BASE_FILE
 
 
 def load_base():
-    return json.loads(BASE_FILE.read_text())
+    return json.loads(BASE_FILE.read_text(encoding="utf-8"))
 
 
 def build_vless_uri(uuid: str, name: str):
@@ -42,9 +40,10 @@ def build_subscription_url(token: str):
     base = load_base()
 
     panel = base["panel"]
+    scheme = panel.get("scheme", "https")
 
     return (
-        f"https://{panel['domain']}"
+        f"{scheme}://{panel['domain']}"
         f":{panel['port']}"
         f"/sub/{token}"
     )

@@ -5,6 +5,7 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
 
 # IDE
 .vscode/
@@ -13,6 +14,7 @@ venv/
 # Runtime data
 users.json
 base.json
+rendered/
 
 # Temporary files
 *.bak

@@ -1,51 +1,45 @@
-from fastapi import FastAPI, HTTPException
+import json
+import secrets
+import uuid
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from fastapi.templating import Jinja2Templates
-from fastapi import Request
 from pydantic import BaseModel
-import json
-import uuid
-import secrets
-import subprocess
-import sys
-from pathlib import Path
-from links import build_vless_uri, build_hy2_uri, build_subscription_url
+
+from config import ENV, PROJECT_DIR, USERS_FILE
+from links import (
+    build_hy2_uri,
+    build_subscription_url,
+    build_vless_uri,
+)
+from render import render_config
+from deploy import deploy_config
 
 app = FastAPI(title="VPN Manager")
 
-USERS_FILE = Path("users.json")
-
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(
+    directory=str(PROJECT_DIR / "templates")
+)
 
 class UserCreate(BaseModel):
     name: str
 
 
 def apply_config():
+    render_config()
 
-    subprocess.run(
-        [
-            sys.executable,
-            "/opt/vpn-manager/render.py"
-        ],
-        check=True
-    )
-
-    subprocess.run(
-        [
-            "/usr/bin/sudo",
-            sys.executable,
-            "/opt/vpn-manager/deploy.py"
-        ],
-        check=True
-    )
+    if ENV == "production":
+        deploy_config()
 
 
 def load_users():
     if not USERS_FILE.exists():
         return {}
 
-    return json.loads(USERS_FILE.read_text())
+    return json.loads(
+        USERS_FILE.read_text(encoding="utf-8")
+    )
 
 
 def find_user_by_token(token):
@@ -60,7 +54,12 @@ def find_user_by_token(token):
 
 def save_users(data):
     USERS_FILE.write_text(
-        json.dumps(data, indent=2)
+        json.dumps(
+            data,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
     )
 
 
