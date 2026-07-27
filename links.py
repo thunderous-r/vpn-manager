@@ -40,9 +40,10 @@ def build_subscription_url(token: str):
     base = load_base()
 
     panel = base["panel"]
+    scheme = panel.get("scheme", "https")
 
     return (
-        f"https://{panel['domain']}"
+        f"{scheme}://{panel['domain']}"
         f":{panel['port']}"
         f"/sub/{token}"
     )
