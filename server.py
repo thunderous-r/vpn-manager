@@ -1,9 +1,8 @@
 import json
 import secrets
-import uuid
 import subprocess
 import sys
-import os
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -12,12 +11,13 @@ from pydantic import BaseModel
 
 from config import ENV, PROJECT_DIR, USERS_FILE
 from links import (
+    build_hy2_uri,
     build_subscription_url,
     build_user_links,
     build_vless_uri,
-    build_hy2_uri,
 )
 from render import render_config
+
 
 app = FastAPI(title="VPN Manager")
 
@@ -25,18 +25,6 @@ templates = Jinja2Templates(
     directory=str(PROJECT_DIR / "templates")
 )
 
-env = os.environ.copy()
-
-subprocess.run(
-    [
-        "/usr/bin/sudo",
-        "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
-        sys.executable,
-        str(PROJECT_DIR / "deploy.py"),
-    ],
-    check=True,
-    env=env,
-)
 
 class UserCreate(BaseModel):
     name: str
@@ -49,12 +37,10 @@ def apply_config():
         subprocess.run(
             [
                 "/usr/bin/sudo",
-                "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
                 sys.executable,
                 str(PROJECT_DIR / "deploy.py"),
             ],
             check=True,
-            env=os.environ.copy(),
         )
 
 
@@ -93,7 +79,7 @@ def admin(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={}
+        context={},
     )
 
 
@@ -102,7 +88,9 @@ def get_users():
     users = load_users()
 
     for user in users.values():
-        user["subscription"] = build_subscription_url(user["token"])
+        user["subscription"] = build_subscription_url(
+            user["token"]
+        )
 
     return users
 
@@ -114,7 +102,7 @@ def create_user(req: UserCreate):
     if req.name in users:
         raise HTTPException(
             status_code=409,
-            detail="User already exists"
+            detail="User already exists",
         )
 
     token = secrets.token_urlsafe(24)
@@ -123,26 +111,25 @@ def create_user(req: UserCreate):
         "uuid": str(uuid.uuid4()),
         "hy2_password": secrets.token_urlsafe(24),
         "token": token,
-        "enabled": True
+        "enabled": True,
     }
 
     users[req.name] = user
 
     save_users(users)
-
     apply_config()
-    
+
     return {
         **user,
         "vless_uri": build_vless_uri(
             user["uuid"],
-            req.name
+            req.name,
         ),
         "hy2_uri": build_hy2_uri(
             user["hy2_password"],
-            req.name
+            req.name,
         ),
-        "subscription": build_subscription_url(token)
+        "subscription": build_subscription_url(token),
     }
 
 
@@ -153,23 +140,22 @@ def delete_user(name: str):
     if name not in users:
         raise HTTPException(
             status_code=404,
-            detail="User not found"
+            detail="User not found",
         )
 
     del users[name]
 
     save_users(users)
-
     apply_config()
 
     return {
-        "status": "deleted"
+        "status": "deleted",
     }
 
 
 @app.get(
     "/sub/{token}",
-    response_class=PlainTextResponse
+    response_class=PlainTextResponse,
 )
 def subscription(token: str):
     name, user = find_user_by_token(token)
@@ -177,53 +163,53 @@ def subscription(token: str):
     if not user:
         raise HTTPException(
             status_code=404,
-            detail="Subscription not found"
+            detail="Subscription not found",
         )
 
     return "\n".join(
-    build_user_links(
-        uuid=user["uuid"],
-        hy2_password=user["hy2_password"],
-        name=name,
+        build_user_links(
+            uuid=user["uuid"],
+            hy2_password=user["hy2_password"],
+            name=name,
+        )
     )
-)
 
 
 @app.post("/api/users/{name}/disable")
 def disable_user(name: str):
-
     users = load_users()
 
     if name not in users:
         raise HTTPException(
             status_code=404,
-            detail="User not found"
+            detail="User not found",
         )
 
     users[name]["enabled"] = False
 
     save_users(users)
-
     apply_config()
 
-    return {"status": "disabled"}
+    return {
+        "status": "disabled",
+    }
 
 
 @app.post("/api/users/{name}/enable")
 def enable_user(name: str):
-
     users = load_users()
 
     if name not in users:
         raise HTTPException(
             status_code=404,
-            detail="User not found"
+            detail="User not found",
         )
 
     users[name]["enabled"] = True
 
     save_users(users)
-
     apply_config()
 
-    return {"status": "enabled"}
+    return {
+        "status": "enabled",
+    }

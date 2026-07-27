@@ -15,12 +15,55 @@ SYSTEMCTL_BIN = "/usr/bin/systemctl"
 
 DE_LIVE_CONFIG_FILE = Path("/etc/sing-box/config.json")
 
-RU_SSH_HOST = os.environ.get("RU_SSH_HOST")
-RU_SSH_USER = os.environ.get("RU_SSH_USER", "sergey")
-RU_SSH_KEY = os.environ.get(
-    "RU_SSH_KEY",
-    "/root/.ssh/vpn-manager-ru",
+ENV_FILE = Path("/etc/vpn-manager.env")
+
+
+def load_env_file(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+
+    values = {}
+
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        line = raw_line.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        key, separator, value = line.partition("=")
+
+        if not separator or not key.strip():
+            raise RuntimeError(
+                f"Invalid line {line_number} in {path}"
+            )
+
+        values[key.strip()] = value.strip().strip("\"'")
+
+    return values
+
+
+DEPLOY_ENV = load_env_file(ENV_FILE)
+
+RU_SSH_HOST = (
+    os.environ.get("RU_SSH_HOST")
+    or DEPLOY_ENV.get("RU_SSH_HOST")
 )
+
+RU_SSH_USER = (
+    os.environ.get("RU_SSH_USER")
+    or DEPLOY_ENV.get("RU_SSH_USER")
+    or "sergey"
+)
+
+RU_SSH_KEY = (
+    os.environ.get("RU_SSH_KEY")
+    or DEPLOY_ENV.get("RU_SSH_KEY")
+    or "/root/.ssh/vpn-manager-ru"
+)
+
 RU_REMOTE_TEMP_FILE = "/tmp/ru-config.new.json"
 RU_LIVE_CONFIG_FILE = "/etc/sing-box/config.json"
 
@@ -167,6 +210,10 @@ def deploy_remote_ru() -> None:
 
 def deploy_configs() -> None:
     require_root()
+    if not RU_SSH_HOST:
+        raise RuntimeError(
+            "RU_SSH_HOST is not configured"
+        )
 
     if not DE_RENDERED_CONFIG_FILE.exists():
         raise RuntimeError(
