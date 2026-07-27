@@ -1,4 +1,7 @@
 import os
+
+os.environ.setdefault("ENV", "production")
+
 import shutil
 import subprocess
 import sys
