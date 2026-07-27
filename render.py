@@ -4,104 +4,262 @@ from pathlib import Path
 from config import (
     BASE_FILE,
     USERS_FILE,
-    RENDERED_CONFIG_FILE,
+    DE_RENDERED_CONFIG_FILE,
+    RU_RENDERED_CONFIG_FILE,
 )
 
 
-def load_json(path: Path):
+def load_json(path: Path) -> dict:
     return json.loads(
         path.read_text(encoding="utf-8")
     )
 
 
-def render_config() -> Path:
-    base = load_json(BASE_FILE)
-    users = load_json(USERS_FILE)
+def write_config(path: Path, config: dict) -> Path:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    enabled_users = [
+    path.write_text(
+        json.dumps(
+            config,
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    return path
+
+
+def get_enabled_users(users: dict) -> list[dict]:
+    return [
         user
         for user in users.values()
         if user.get("enabled", True)
     ]
 
-    vless_users = [
+
+def build_vless_users(
+    enabled_users: list[dict],
+) -> list[dict]:
+    return [
         {
             "uuid": user["uuid"]
         }
         for user in enabled_users
     ]
 
-    hy2_users = [
+
+def build_hy2_users(
+    enabled_users: list[dict],
+) -> list[dict]:
+    return [
         {
             "password": user["hy2_password"]
         }
         for user in enabled_users
     ]
 
-    config = {
+
+def build_reality_inbound(
+    node: dict,
+    users: list[dict],
+) -> dict:
+    reality = node["reality"]
+
+    return {
+        "type": "vless",
+        "tag": "vless-reality",
+        "listen": "::",
+        "listen_port": reality["listen_port"],
+        "users": users,
+        "tls": {
+            "enabled": True,
+            "server_name": reality["server_name"],
+            "reality": {
+                "enabled": True,
+                "handshake": {
+                    "server": reality["server_name"],
+                    "server_port": 443,
+                },
+                "private_key": reality["private_key"],
+                "short_id": [
+                    reality["short_id"]
+                ],
+            },
+        },
+    }
+
+
+def build_hy2_inbound(
+    node: dict,
+    users: list[dict],
+) -> dict:
+    hy2 = node["hy2"]
+
+    return {
+        "type": "hysteria2",
+        "tag": "hy2-in",
+        "listen": "::",
+        "listen_port": hy2["listen_port"],
+        "users": users,
+        "tls": {
+            "enabled": True,
+            "server_name": hy2["domain"],
+            "certificate_path": hy2["certificate_path"],
+            "key_path": hy2["key_path"],
+        },
+    }
+
+
+def build_de_config(
+    base: dict,
+    vless_users: list[dict],
+    hy2_users: list[dict],
+) -> dict:
+    de_node = base["nodes"]["de"]
+    tunnel = base["tunnel"]
+
+    return {
         "log": {
             "level": "info"
         },
         "inbounds": [
+            build_reality_inbound(
+                de_node,
+                vless_users,
+            ),
+            build_hy2_inbound(
+                de_node,
+                hy2_users,
+            ),
             {
                 "type": "vless",
-                "tag": "vless-reality",
+                "tag": "ru-tunnel",
                 "listen": "::",
-                "listen_port": base["reality"]["listen_port"],
-                "users": vless_users,
-                "tls": {
-                    "enabled": True,
-                    "server_name": base["reality"]["server_name"],
-                    "reality": {
-                        "enabled": True,
-                        "handshake": {
-                            "server": base["reality"]["server_name"],
-                            "server_port": 443
-                        },
-                        "private_key": base["reality"]["private_key"],
-                        "short_id": [
-                            base["reality"]["short_id"]
-                        ]
+                "listen_port": tunnel["listen_port"],
+                "users": [
+                    {
+                        "uuid": tunnel["uuid"]
                     }
-                }
-            },
-            {
-                "type": "hysteria2",
-                "tag": "hy2",
-                "listen": "::",
-                "listen_port": base["hy2"]["listen_port"],
-                "users": hy2_users,
+                ],
                 "tls": {
                     "enabled": True,
-                    "server_name": base["hy2"]["domain"],
-                    "certificate_path": base["hy2"]["certificate_path"],
-                    "key_path": base["hy2"]["key_path"]
-                }
-            }
+                    "server_name": tunnel["server_name"],
+                    "certificate_path": tunnel[
+                        "certificate_path"
+                    ],
+                    "key_path": tunnel["key_path"],
+                },
+            },
         ],
         "outbounds": [
             {
-                "type": "direct"
+                "type": "direct",
+                "tag": "direct",
             }
-        ]
+        ],
     }
 
-    RENDERED_CONFIG_FILE.parent.mkdir(
-        parents=True,
-        exist_ok=True
+
+def build_ru_config(
+    base: dict,
+    vless_users: list[dict],
+    hy2_users: list[dict],
+) -> dict:
+    ru_node = base["nodes"]["ru"]
+    tunnel = base["tunnel"]
+    routing = base["routing"]
+
+    return {
+        "log": {
+            "level": "info"
+        },
+        "inbounds": [
+            build_reality_inbound(
+                ru_node,
+                vless_users,
+            ),
+            build_hy2_inbound(
+                ru_node,
+                hy2_users,
+            ),
+        ],
+        "outbounds": [
+            {
+                "type": "direct",
+                "tag": "direct",
+            },
+            {
+                "type": "vless",
+                "tag": "de-out",
+                "server": tunnel["server"],
+                "server_port": tunnel["listen_port"],
+                "uuid": tunnel["uuid"],
+                "tls": {
+                    "enabled": True,
+                    "server_name": tunnel["server_name"],
+                },
+            },
+        ],
+        "route": {
+            "rule_set": routing["rule_sets"],
+            "rules": [
+                {
+                    "rule_set": routing[
+                        "direct_rule_sets"
+                    ],
+                    "outbound": "direct",
+                }
+            ],
+            "final": "de-out",
+        },
+    }
+
+
+def render_config() -> tuple[Path, Path]:
+    base = load_json(BASE_FILE)
+    users = load_json(USERS_FILE)
+
+    enabled_users = get_enabled_users(users)
+
+    vless_users = build_vless_users(
+        enabled_users
     )
 
-    RENDERED_CONFIG_FILE.write_text(
-        json.dumps(
-            config,
-            indent=2
-        ),
-        encoding="utf-8"
+    hy2_users = build_hy2_users(
+        enabled_users
     )
 
-    return RENDERED_CONFIG_FILE
+    de_config = build_de_config(
+        base,
+        vless_users,
+        hy2_users,
+    )
+
+    ru_config = build_ru_config(
+        base,
+        vless_users,
+        hy2_users,
+    )
+
+    de_output = write_config(
+        DE_RENDERED_CONFIG_FILE,
+        de_config,
+    )
+
+    ru_output = write_config(
+        RU_RENDERED_CONFIG_FILE,
+        ru_config,
+    )
+
+    return de_output, ru_output
 
 
 if __name__ == "__main__":
-    output_file = render_config()
-    print(f"Generated: {output_file}")
+    de_file, ru_file = render_config()
+
+    print(f"Generated DE: {de_file}")
+    print(f"Generated RU: {ru_file}")

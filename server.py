@@ -3,6 +3,7 @@ import secrets
 import uuid
 import subprocess
 import sys
+import os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -11,9 +12,10 @@ from pydantic import BaseModel
 
 from config import ENV, PROJECT_DIR, USERS_FILE
 from links import (
-    build_hy2_uri,
     build_subscription_url,
+    build_user_links,
     build_vless_uri,
+    build_hy2_uri,
 )
 from render import render_config
 
@@ -21,6 +23,19 @@ app = FastAPI(title="VPN Manager")
 
 templates = Jinja2Templates(
     directory=str(PROJECT_DIR / "templates")
+)
+
+env = os.environ.copy()
+
+subprocess.run(
+    [
+        "/usr/bin/sudo",
+        "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
+        sys.executable,
+        str(PROJECT_DIR / "deploy.py"),
+    ],
+    check=True,
+    env=env,
 )
 
 class UserCreate(BaseModel):
@@ -34,10 +49,12 @@ def apply_config():
         subprocess.run(
             [
                 "/usr/bin/sudo",
+                "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
                 sys.executable,
                 str(PROJECT_DIR / "deploy.py"),
             ],
             check=True,
+            env=os.environ.copy(),
         )
 
 
@@ -163,16 +180,13 @@ def subscription(token: str):
             detail="Subscription not found"
         )
 
-    return "\n".join([
-        build_vless_uri(
-            user["uuid"],
-            name
-        ),
-        build_hy2_uri(
-            user["hy2_password"],
-            name
-        )
-    ])
+    return "\n".join(
+    build_user_links(
+        uuid=user["uuid"],
+        hy2_password=user["hy2_password"],
+        name=name,
+    )
+)
 
 
 @app.post("/api/users/{name}/disable")
