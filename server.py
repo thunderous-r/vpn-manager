@@ -1,7 +1,5 @@
 import json
 import secrets
-import subprocess
-import sys
 import uuid
 
 from fastapi import FastAPI, HTTPException, Request
@@ -16,6 +14,7 @@ from links import (
     build_vless_uri,
 )
 from render import render_config
+from deploy import deploy_config
 
 app = FastAPI(title="VPN Manager")
 
@@ -31,14 +30,7 @@ def apply_config():
     render_config()
 
     if ENV == "production":
-        subprocess.run(
-            [
-                "/usr/bin/sudo",
-                sys.executable,
-                str(PROJECT_DIR / "deploy.py"),
-            ],
-            check=True,
-        )
+        deploy_config()
 
 
 def load_users():
