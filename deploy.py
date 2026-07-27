@@ -15,20 +15,21 @@ SYSTEMCTL_BIN = "/usr/bin/systemctl"
 
 DE_LIVE_CONFIG_FILE = Path("/etc/sing-box/config.json")
 
-RU_SSH_HOST = "ru.donothing.dynv6.net"
-RU_SSH_USER = "sergey"
+RU_SSH_HOST = os.environ.get("RU_SSH_HOST")
+RU_SSH_USER = os.environ.get("RU_SSH_USER", "sergey")
+RU_SSH_KEY = os.environ.get(
+    "RU_SSH_KEY",
+    "/root/.ssh/vpn-manager-ru",
+)
 RU_REMOTE_TEMP_FILE = "/tmp/ru-config.new.json"
 RU_LIVE_CONFIG_FILE = "/etc/sing-box/config.json"
 
 
 def run_command(
     command: list[str],
-    *,
-    input_text: str | None = None,
 ) -> subprocess.CompletedProcess:
     return subprocess.run(
         command,
-        input=input_text,
         capture_output=True,
         text=True,
     )
@@ -110,6 +111,8 @@ def upload_ru_config() -> None:
 
     upload = run_command([
         "/usr/bin/scp",
+        "-i",
+        RU_SSH_KEY,
         "-o",
         "BatchMode=yes",
         "-o",
@@ -134,51 +137,19 @@ def deploy_remote_ru() -> None:
 
     print("Deploying RU config...")
 
-    remote_script = f"""
-set -eu
-
-TEMP_FILE="{RU_REMOTE_TEMP_FILE}"
-LIVE_FILE="{RU_LIVE_CONFIG_FILE}"
-BACKUP_FILE="${{LIVE_FILE}}.bak"
-
-sudo {SING_BOX_BIN} check -c "$TEMP_FILE"
-
-sudo cp --preserve=mode,ownership,timestamps \
-    "$LIVE_FILE" \
-    "$BACKUP_FILE"
-
-sudo cp "$TEMP_FILE" "$LIVE_FILE"
-
-if sudo {SYSTEMCTL_BIN} restart sing-box; then
-    rm -f "$TEMP_FILE"
-    echo "RU DEPLOY OK"
-    exit 0
-fi
-
-echo "RU RESTART FAILED, ROLLING BACK"
-
-sudo cp "$BACKUP_FILE" "$LIVE_FILE"
-
-if ! sudo {SYSTEMCTL_BIN} restart sing-box; then
-    echo "RU ROLLBACK RESTART FAILED" >&2
-fi
-
-exit 1
-"""
-
-    deploy = run_command(
-        [
-            "/usr/bin/ssh",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ConnectTimeout=10",
-            f"{RU_SSH_USER}@{RU_SSH_HOST}",
-            "/bin/bash",
-            "-s",
-        ],
-        input_text=remote_script,
-    )
+    deploy = run_command([
+        "/usr/bin/ssh",
+        "-i",
+        RU_SSH_KEY,
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+        f"{RU_SSH_USER}@{RU_SSH_HOST}",
+        "sudo",
+        "-n",
+        "/usr/local/sbin/deploy-sing-box-config",
+    ])
 
     if deploy.stdout:
         print(deploy.stdout)
