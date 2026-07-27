@@ -1,12 +1,15 @@
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from config import ENV, RENDERED_CONFIG_FILE
 
-
+RENDERED_CONFIG_FILE = Path("/tmp/config.new.json")
 LIVE_CONFIG_FILE = Path("/etc/sing-box/config.json")
+
+SING_BOX_BIN = "/usr/bin/sing-box"
+SYSTEMCTL_BIN = "/usr/bin/systemctl"
 
 
 def run_command(command: list[str]) -> subprocess.CompletedProcess:
@@ -18,10 +21,9 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess:
 
 
 def deploy_config() -> None:
-    if ENV != "production":
+    if os.name != "posix" or os.geteuid() != 0:
         raise RuntimeError(
-            "deploy_config() is only available "
-            "in the production environment"
+            "deploy_config() must be run as root on production"
         )
 
     check = run_command([
