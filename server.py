@@ -3,6 +3,7 @@ import secrets
 import uuid
 import subprocess
 import sys
+import os
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -24,6 +25,19 @@ templates = Jinja2Templates(
     directory=str(PROJECT_DIR / "templates")
 )
 
+env = os.environ.copy()
+
+subprocess.run(
+    [
+        "/usr/bin/sudo",
+        "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
+        sys.executable,
+        str(PROJECT_DIR / "deploy.py"),
+    ],
+    check=True,
+    env=env,
+)
+
 class UserCreate(BaseModel):
     name: str
 
@@ -35,10 +49,12 @@ def apply_config():
         subprocess.run(
             [
                 "/usr/bin/sudo",
+                "--preserve-env=RU_SSH_HOST,RU_SSH_USER,RU_SSH_KEY",
                 sys.executable,
                 str(PROJECT_DIR / "deploy.py"),
             ],
             check=True,
+            env=os.environ.copy(),
         )
 
 
