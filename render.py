@@ -114,6 +114,18 @@ def build_hy2_inbound(
     }
 
 
+def build_bittorrent_rules() -> list[dict]:
+    return [
+        {
+            "action": "sniff",
+        },
+        {
+            "protocol": "bittorrent",
+            "action": "reject",
+        },
+    ]
+
+
 def build_de_config(
     base: dict,
     vless_users: list[dict],
@@ -161,6 +173,10 @@ def build_de_config(
                 "tag": "direct",
             }
         ],
+        "route": {
+            "rules": build_bittorrent_rules(),
+            "final": "direct",
+        },
     }
 
 
@@ -207,12 +223,13 @@ def build_ru_config(
         "route": {
             "rule_set": routing["rule_sets"],
             "rules": [
+                *build_bittorrent_rules(),
                 {
                     "rule_set": routing[
                         "direct_rule_sets"
                     ],
                     "outbound": "direct",
-                }
+                },
             ],
             "final": "de-out",
         },
