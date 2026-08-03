@@ -193,6 +193,12 @@ def build_ru_config(
         "log": {
             "level": "info"
         },
+        "experimental": {
+            "cache_file": {
+                "enabled": True,
+                "path": "/var/lib/sing-box/cache.db",
+            },
+        },
         "inbounds": [
             build_reality_inbound(
                 ru_node,
