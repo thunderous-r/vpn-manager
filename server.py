@@ -17,6 +17,7 @@ from links import (
     build_vless_uri,
 )
 from render import render_config
+from subscriptions import render_subscription
 
 
 app = FastAPI(title="VPN Manager")
@@ -157,7 +158,7 @@ def delete_user(name: str):
     "/sub/{token}",
     response_class=PlainTextResponse,
 )
-def subscription(token: str):
+def subscription(token: str, request: Request):
     name, user = find_user_by_token(token)
 
     if not user:
@@ -166,12 +167,20 @@ def subscription(token: str):
             detail="Subscription not found",
         )
 
-    return "\n".join(
-        build_user_links(
-            uuid=user["uuid"],
-            hy2_password=user["hy2_password"],
-            name=name,
-        )
+    links = build_user_links(
+        uuid=user["uuid"],
+        hy2_password=user["hy2_password"],
+        name=name,
+    )
+
+    body, headers = render_subscription(
+        user_agent=request.headers.get("user-agent", ""),
+        links=links,
+    )
+
+    return PlainTextResponse(
+        content=body,
+        headers=headers,
     )
 
 
