@@ -1,5 +1,5 @@
 import json
-
+from urllib.parse import quote
 from config import BASE_FILE
 
 
@@ -28,6 +28,10 @@ def build_vless_uri(
 
     reality = node["reality"]
     location = node["meta"]["location"]
+    label = quote(
+        f"{location}-Reality-{name}",
+        safe="",
+    )
 
     return (
         f"vless://{uuid}"
@@ -39,7 +43,7 @@ def build_vless_uri(
         f"&sid={reality['short_id']}"
         f"&type=tcp"
         f"&encryption=none"
-        f"#{location}-Reality-{name}"
+        f"#{label}"
     )
 
 
@@ -53,12 +57,16 @@ def build_hy2_uri(
 
     hy2 = node["hy2"]
     location = node["meta"]["location"]
+    label = quote(
+        f"{location}-HY2-{name}",
+        safe="",
+    )
 
     return (
         f"hy2://{password}"
         f"@{hy2['domain']}:{hy2['listen_port']}/"
         f"?sni={hy2['domain']}"
-        f"#{location}-HY2-{name}"
+        f"#{label}"
     )
 
 
