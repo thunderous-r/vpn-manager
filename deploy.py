@@ -2,21 +2,24 @@ import os
 
 os.environ.setdefault("ENV", "production")
 
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from config import (
-    DE_RENDERED_CONFIG_FILE,
-    RU_RENDERED_CONFIG_FILE,
+    BASE_FILE,
+    rendered_config_file,
 )
 
 
 SING_BOX_BIN = "/usr/bin/sing-box"
 SYSTEMCTL_BIN = "/usr/bin/systemctl"
 
-DE_LIVE_CONFIG_FILE = Path("/etc/sing-box/config.json")
+LOCAL_LIVE_CONFIG_FILE = Path(
+    "/etc/sing-box/config.json"
+)
 
 ENV_FILE = Path("/etc/vpn-manager.env")
 
@@ -50,25 +53,21 @@ def load_env_file(path: Path) -> dict[str, str]:
 
 DEPLOY_ENV = load_env_file(ENV_FILE)
 
-RU_SSH_HOST = (
-    os.environ.get("RU_SSH_HOST")
-    or DEPLOY_ENV.get("RU_SSH_HOST")
-)
+def load_base() -> dict:
+    return json.loads(
+        BASE_FILE.read_text(encoding="utf-8")
+    )
 
-RU_SSH_USER = (
-    os.environ.get("RU_SSH_USER")
-    or DEPLOY_ENV.get("RU_SSH_USER")
-    or "sergey"
-)
 
-RU_SSH_KEY = (
-    os.environ.get("RU_SSH_KEY")
-    or DEPLOY_ENV.get("RU_SSH_KEY")
-    or "/root/.ssh/vpn-manager-ru"
-)
-
-RU_REMOTE_TEMP_FILE = "/tmp/ru-config.new.json"
-RU_LIVE_CONFIG_FILE = "/etc/sing-box/config.json"
+def get_deploy_env(
+    name: str,
+    default: str | None = None,
+) -> str | None:
+    return (
+        os.environ.get(name)
+        or DEPLOY_ENV.get(name)
+        or default
+    )
 
 
 def run_command(
@@ -88,35 +87,42 @@ def require_root() -> None:
         )
 
 
-def deploy_local_de() -> None:
-    print("Deploying DE config...")
+def deploy_local(
+    node_name: str,
+    config_file: Path,
+) -> None:
+    print(f"Deploying {node_name} locally...")
 
     check = run_command([
         SING_BOX_BIN,
         "check",
         "-c",
-        str(DE_RENDERED_CONFIG_FILE),
+        str(config_file),
     ])
 
     if check.returncode != 0:
-        print("DE CONFIG INVALID")
+        print(
+            f"{node_name} CONFIG INVALID"
+        )
         print(check.stderr)
+
         raise RuntimeError(
-            "DE sing-box config validation failed"
+            f"{node_name} sing-box config "
+            f"validation failed"
         )
 
     backup_file = Path(
-        f"{DE_LIVE_CONFIG_FILE}.bak"
+        f"{LOCAL_LIVE_CONFIG_FILE}.bak"
     )
 
     shutil.copy2(
-        DE_LIVE_CONFIG_FILE,
+        LOCAL_LIVE_CONFIG_FILE,
         backup_file,
     )
 
     shutil.copy2(
-        DE_RENDERED_CONFIG_FILE,
-        DE_LIVE_CONFIG_FILE,
+        config_file,
+        LOCAL_LIVE_CONFIG_FILE,
     )
 
     restart = run_command([
@@ -126,15 +132,21 @@ def deploy_local_de() -> None:
     ])
 
     if restart.returncode == 0:
-        print("DE DEPLOY OK")
+        print(
+            f"{node_name} LOCAL DEPLOY OK"
+        )
         return
 
-    print("DE RESTART FAILED")
-    print(restart.stderr)
+    print(
+        f"{node_name} RESTART FAILED"
+    )
+
+    if restart.stderr:
+        print(restart.stderr)
 
     shutil.copy2(
         backup_file,
-        DE_LIVE_CONFIG_FILE,
+        LOCAL_LIVE_CONFIG_FILE,
     )
 
     rollback_restart = run_command([
@@ -144,98 +156,239 @@ def deploy_local_de() -> None:
     ])
 
     if rollback_restart.returncode != 0:
-        print("DE ROLLBACK RESTART FAILED")
-        print(rollback_restart.stderr)
+        print(
+            f"{node_name} ROLLBACK "
+            f"RESTART FAILED"
+        )
+
+        if rollback_restart.stderr:
+            print(rollback_restart.stderr)
 
     raise RuntimeError(
-        "DE deploy failed; config was rolled back"
+        f"{node_name} deploy failed; "
+        f"config was rolled back"
     )
 
 
-def upload_ru_config() -> None:
-    print("Uploading RU config...")
+def upload_remote_config(
+    node_name: str,
+    config_file: Path,
+    ssh_host: str,
+    ssh_user: str,
+    ssh_key: str,
+    remote_temp_file: str,
+) -> None:
+    print(
+        f"Uploading {node_name} config..."
+    )
 
     upload = run_command([
         "/usr/bin/scp",
         "-i",
-        RU_SSH_KEY,
+        ssh_key,
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        str(RU_RENDERED_CONFIG_FILE),
+        str(config_file),
         (
-            f"{RU_SSH_USER}@{RU_SSH_HOST}:"
-            f"{RU_REMOTE_TEMP_FILE}"
+            f"{ssh_user}@{ssh_host}:"
+            f"{remote_temp_file}"
         ),
     ])
 
     if upload.returncode != 0:
-        print("RU CONFIG UPLOAD FAILED")
-        print(upload.stderr)
+        print(
+            f"{node_name} CONFIG UPLOAD FAILED"
+        )
+
+        if upload.stderr:
+            print(upload.stderr)
+
         raise RuntimeError(
-            "Failed to upload RU config"
+            f"Failed to upload "
+            f"{node_name} config"
         )
 
 
-def deploy_remote_ru() -> None:
-    upload_ru_config()
+def deploy_remote(
+    node_name: str,
+    node: dict,
+    config_file: Path,
+) -> None:
+    deploy = node["deploy"]
 
-    print("Deploying RU config...")
+    env_prefix = deploy.get(
+        "env_prefix",
+        node_name.upper().replace("-", "_"),
+    )
 
-    deploy = run_command([
+    ssh_host = get_deploy_env(
+        f"{env_prefix}_SSH_HOST"
+    )
+
+    ssh_user = get_deploy_env(
+        f"{env_prefix}_SSH_USER"
+    )
+
+    ssh_key = get_deploy_env(
+        f"{env_prefix}_SSH_KEY"
+    )
+
+    if not ssh_host:
+        raise RuntimeError(
+            f"{env_prefix}_SSH_HOST "
+            f"is not configured"
+        )
+
+    if not ssh_user:
+        raise RuntimeError(
+            f"{env_prefix}_SSH_USER "
+            f"is not configured"
+        )
+
+    if not ssh_key:
+        raise RuntimeError(
+            f"{env_prefix}_SSH_KEY "
+            f"is not configured"
+        )
+
+    remote_temp_file = deploy.get(
+        "remote_temp_file",
+        "/tmp/vpn-manager-config.new.json",
+    )
+
+    remote_helper = deploy.get(
+        "remote_helper",
+        "/usr/local/sbin/deploy-sing-box-config",
+    )
+
+    upload_remote_config(
+        node_name=node_name,
+        config_file=config_file,
+        ssh_host=ssh_host,
+        ssh_user=ssh_user,
+        ssh_key=ssh_key,
+        remote_temp_file=remote_temp_file,
+    )
+
+    print(
+        f"Deploying {node_name} remotely..."
+    )
+
+    result = run_command([
         "/usr/bin/ssh",
         "-i",
-        RU_SSH_KEY,
+        ssh_key,
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        f"{RU_SSH_USER}@{RU_SSH_HOST}",
+        f"{ssh_user}@{ssh_host}",
         "sudo",
         "-n",
-        "/usr/local/sbin/deploy-sing-box-config",
+        remote_helper,
     ])
 
-    if deploy.stdout:
-        print(deploy.stdout)
+    if result.stdout:
+        print(result.stdout)
 
-    if deploy.returncode != 0:
-        print("RU DEPLOY FAILED")
-
-        if deploy.stderr:
-            print(deploy.stderr)
-
-        raise RuntimeError(
-            "RU deploy failed; remote rollback attempted"
+    if result.returncode == 0:
+        print(
+            f"{node_name} REMOTE DEPLOY OK"
         )
+        return
+
+    print(
+        f"{node_name} REMOTE DEPLOY FAILED"
+    )
+
+    if result.stderr:
+        print(result.stderr)
+
+    raise RuntimeError(
+        f"{node_name} remote deploy failed; "
+        f"remote rollback attempted"
+    )
 
 
 def deploy_configs() -> None:
     require_root()
-    if not RU_SSH_HOST:
-        raise RuntimeError(
-            "RU_SSH_HOST is not configured"
+
+    base = load_base()
+
+    remote_nodes = []
+    local_nodes = []
+
+    for node_name, node in base["nodes"].items():
+        if not node.get("enabled", True):
+            continue
+
+        deploy = node.get("deploy")
+
+        if not deploy:
+            raise RuntimeError(
+                f"Deploy configuration missing "
+                f"for node {node_name!r}"
+            )
+
+        mode = deploy.get("mode")
+
+        config_file = rendered_config_file(
+            node_name
         )
 
-    if not DE_RENDERED_CONFIG_FILE.exists():
-        raise RuntimeError(
-            f"DE rendered config not found: "
-            f"{DE_RENDERED_CONFIG_FILE}"
+        if not config_file.exists():
+            raise RuntimeError(
+                f"{node_name} rendered config "
+                f"not found: {config_file}"
+            )
+
+        item = (
+            node_name,
+            node,
+            config_file,
         )
 
-    if not RU_RENDERED_CONFIG_FILE.exists():
+        if mode == "ssh":
+            remote_nodes.append(item)
+
+        elif mode == "local":
+            local_nodes.append(item)
+
+        else:
+            raise RuntimeError(
+                f"Unsupported deploy mode "
+                f"for {node_name!r}: {mode!r}"
+            )
+
+    if len(local_nodes) > 1:
         raise RuntimeError(
-            f"RU rendered config not found: "
-            f"{RU_RENDERED_CONFIG_FILE}"
+            "More than one local node configured"
         )
 
-    # Сначала обновляем RU. Пока RU не принял новых
-    # пользователей, DE остаётся в прежнем состоянии.
-    deploy_remote_ru()
+    # Сначала удалённые ноды.
+    # Локальный control-plane обновляем последним.
+    for (
+        node_name,
+        node,
+        config_file,
+    ) in remote_nodes:
+        deploy_remote(
+            node_name,
+            node,
+            config_file,
+        )
 
-    # После успешного RU-деплоя обновляем DE.
-    deploy_local_de()
+    for (
+        node_name,
+        _node,
+        config_file,
+    ) in local_nodes:
+        deploy_local(
+            node_name,
+            config_file,
+        )
 
     print("ALL NODES DEPLOYED")
 

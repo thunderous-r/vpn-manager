@@ -4,8 +4,7 @@ from pathlib import Path
 from config import (
     BASE_FILE,
     USERS_FILE,
-    DE_RENDERED_CONFIG_FILE,
-    RU_RENDERED_CONFIG_FILE,
+    rendered_config_file,
 )
 
 
@@ -126,27 +125,29 @@ def build_bittorrent_rules() -> list[dict]:
     ]
 
 
-def build_de_config(
+def build_exit_config(
     base: dict,
+    node_name: str,
     vless_users: list[dict],
     hy2_users: list[dict],
 ) -> dict:
-    de_node = base["nodes"]["de"]
-    tunnel = base["tunnel"]
+    node = base["nodes"][node_name]
 
-    return {
-        "log": {
-            "level": "info"
-        },
-        "inbounds": [
-            build_reality_inbound(
-                de_node,
-                vless_users,
-            ),
-            build_hy2_inbound(
-                de_node,
-                hy2_users,
-            ),
+    inbounds = [
+        build_reality_inbound(
+            node,
+            vless_users,
+        ),
+        build_hy2_inbound(
+            node,
+            hy2_users,
+        ),
+    ]
+
+    if node.get("accept_legacy_tunnel", False):
+        tunnel = base["tunnel"]
+
+        inbounds.append(
             {
                 "type": "vless",
                 "tag": "ru-tunnel",
@@ -165,8 +166,14 @@ def build_de_config(
                     ],
                     "key_path": tunnel["key_path"],
                 },
-            },
-        ],
+            }
+        )
+
+    return {
+        "log": {
+            "level": "info"
+        },
+        "inbounds": inbounds,
         "outbounds": [
             {
                 "type": "direct",
@@ -180,12 +187,13 @@ def build_de_config(
     }
 
 
-def build_ru_config(
+def build_ru_entry_config(
     base: dict,
+    node_name: str,
     vless_users: list[dict],
     hy2_users: list[dict],
 ) -> dict:
-    ru_node = base["nodes"]["ru"]
+    ru_node = base["nodes"][node_name]
     tunnel = base["tunnel"]
     routing = base["routing"]
 
@@ -242,7 +250,7 @@ def build_ru_config(
     }
 
 
-def render_config() -> tuple[Path, Path]:
+def render_config() -> dict[str, Path]:
     base = load_json(BASE_FILE)
     users = load_json(USERS_FILE)
 
@@ -256,33 +264,50 @@ def render_config() -> tuple[Path, Path]:
         enabled_users
     )
 
-    de_config = build_de_config(
-        base,
-        vless_users,
-        hy2_users,
-    )
+    outputs = {}
 
-    ru_config = build_ru_config(
-        base,
-        vless_users,
-        hy2_users,
-    )
+    for node_name, node in base["nodes"].items():
+        if not node.get("enabled", True):
+            continue
 
-    de_output = write_config(
-        DE_RENDERED_CONFIG_FILE,
-        de_config,
-    )
+        role = node.get("role")
 
-    ru_output = write_config(
-        RU_RENDERED_CONFIG_FILE,
-        ru_config,
-    )
+        if role == "exit":
+            config = build_exit_config(
+                base,
+                node_name,
+                vless_users,
+                hy2_users,
+            )
 
-    return de_output, ru_output
+        elif role == "ru-entry":
+            config = build_ru_entry_config(
+                base,
+                node_name,
+                vless_users,
+                hy2_users,
+            )
+
+        else:
+            raise RuntimeError(
+                f"Unsupported role for node "
+                f"{node_name!r}: {role!r}"
+            )
+
+        output = write_config(
+            rendered_config_file(node_name),
+            config,
+        )
+
+        outputs[node_name] = output
+
+    return outputs
 
 
 if __name__ == "__main__":
-    de_file, ru_file = render_config()
+    outputs = render_config()
 
-    print(f"Generated DE: {de_file}")
-    print(f"Generated RU: {ru_file}")
+    for node_name, output in outputs.items():
+        print(
+            f"Generated {node_name}: {output}"
+        )

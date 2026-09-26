@@ -17,17 +17,19 @@ PROJECT_DIR = Path(__file__).resolve().parent
 if ENV == "production":
     USERS_FILE = Path("/opt/vpn-manager/users.json")
     BASE_FILE = Path("/opt/vpn-manager/base.json")
-
-    DE_RENDERED_CONFIG_FILE = Path("/tmp/de-config.new.json")
-    RU_RENDERED_CONFIG_FILE = Path("/tmp/ru-config.new.json")
 else:
     USERS_FILE = PROJECT_DIR / "users.json"
     BASE_FILE = PROJECT_DIR / "base.json"
+    
 
-    DE_RENDERED_CONFIG_FILE = (
-        PROJECT_DIR / "rendered" / "de-config.json"
-    )
+def rendered_config_file(node_name: str) -> Path:
+    if ENV == "production":
+        return Path(
+            f"/tmp/{node_name}-config.new.json"
+        )
 
-    RU_RENDERED_CONFIG_FILE = (
-        PROJECT_DIR / "rendered" / "ru-config.json"
+    return (
+        PROJECT_DIR
+        / "rendered"
+        /f"{node_name}-config.json"
     )
