@@ -3,6 +3,7 @@ import secrets
 import subprocess
 import sys
 import uuid
+import copy
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -75,6 +76,30 @@ def save_users(data):
     )
 
 
+def save_users_and_apply(
+    users: dict,
+    previous_users: dict,
+) -> None:
+    save_users(users)
+
+    try:
+        apply_config()
+
+    except Exception as apply_error:
+        save_users(previous_users)
+
+        try:
+            apply_config()
+
+        except Exception as rollback_error:
+            raise RuntimeError(
+                "Config apply failed and rollback "
+                f"also failed: {rollback_error}"
+            ) from apply_error
+
+        raise
+
+
 @app.get("/admin")
 def admin(request: Request):
     return templates.TemplateResponse(
@@ -99,6 +124,7 @@ def get_users():
 @app.post("/api/user/create")
 def create_user(req: UserCreate):
     users = load_users()
+    previous_users = copy.deepcopy(users)
 
     if req.name in users:
         raise HTTPException(
@@ -117,8 +143,10 @@ def create_user(req: UserCreate):
 
     users[req.name] = user
 
-    save_users(users)
-    apply_config()
+    save_users_and_apply(
+        users,
+        previous_users,
+    )
 
     return {
         **user,
@@ -137,6 +165,7 @@ def create_user(req: UserCreate):
 @app.delete("/api/user/{name}")
 def delete_user(name: str):
     users = load_users()
+    previous_users = copy.deepcopy(users)
 
     if name not in users:
         raise HTTPException(
@@ -146,8 +175,10 @@ def delete_user(name: str):
 
     del users[name]
 
-    save_users(users)
-    apply_config()
+    save_users_and_apply(
+        users,
+        previous_users
+    )
 
     return {
         "status": "deleted",
@@ -187,6 +218,7 @@ def subscription(token: str, request: Request):
 @app.post("/api/users/{name}/disable")
 def disable_user(name: str):
     users = load_users()
+    previous_users = copy.deepcopy(users)
 
     if name not in users:
         raise HTTPException(
@@ -196,8 +228,10 @@ def disable_user(name: str):
 
     users[name]["enabled"] = False
 
-    save_users(users)
-    apply_config()
+    save_users_and_apply(
+        users,
+        previous_users
+    )
 
     return {
         "status": "disabled",
@@ -207,6 +241,7 @@ def disable_user(name: str):
 @app.post("/api/users/{name}/enable")
 def enable_user(name: str):
     users = load_users()
+    previous_users = copy.deepcopy(users)
 
     if name not in users:
         raise HTTPException(
@@ -216,8 +251,10 @@ def enable_user(name: str):
 
     users[name]["enabled"] = True
 
-    save_users(users)
-    apply_config()
+    save_users_and_apply(
+        users,
+        previous_users
+    )
 
     return {
         "status": "enabled",
