@@ -113,7 +113,23 @@ def build_hy2_inbound(
     }
 
 
-def build_bittorrent_rules() -> list[dict]:
+def build_common_rules() -> list[dict]:
+    return [
+        {
+            "action": "sniff",
+        },
+        {
+            "protocol": "dns",
+            "action": "hijack-dns",
+        },
+        {
+            "protocol": "bittorrent",
+            "action": "reject",
+        },
+    ]
+
+
+def build_entry_rules() -> list[dict]:
     return [
         {
             "action": "sniff",
@@ -123,6 +139,26 @@ def build_bittorrent_rules() -> list[dict]:
             "action": "reject",
         },
     ]
+
+
+def build_dns() -> dict:
+    return {
+        "servers": [
+            {
+                "type": "https",
+                "tag": "remote-dns",
+                "server": "1.1.1.1",
+                "server_port": 443,
+                "path": "/dns-query",
+                "tls": {
+                    "enabled": True,
+                    "server_name": "cloudflare-dns.com",
+                },
+            }
+        ],
+        "final": "remote-dns",
+        "strategy": "ipv4_only",
+    }
 
 
 def build_exit_config(
@@ -173,6 +209,7 @@ def build_exit_config(
         "log": {
             "level": "info"
         },
+        "dns": build_dns(),
         "inbounds": inbounds,
         "outbounds": [
             {
@@ -181,7 +218,7 @@ def build_exit_config(
             }
         ],
         "route": {
-            "rules": build_bittorrent_rules(),
+            "rules": build_common_rules(),
             "final": "direct",
         },
     }
@@ -237,7 +274,7 @@ def build_ru_entry_config(
         "route": {
             "rule_set": routing["rule_sets"],
             "rules": [
-                *build_bittorrent_rules(),
+                *build_entry_rules(),
                 {
                     "rule_set": routing[
                         "direct_rule_sets"
