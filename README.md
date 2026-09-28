@@ -1,251 +1,558 @@
 # VPN Manager
 
-> Проект предназначен для личного использования и небольшого числа пользователей, не является коммерческой VPN-платформой.
+> VPN Manager — учебно-практический self-hosted проект для изучения и автоматизации управления сетевой инфраструктурой на базе FastAPI и sing-box.  
+> Проект используется для экспериментов с конфигурацией VPN-протоколов, маршрутизацией, DNS, автоматическим развёртыванием конфигураций, управлением пользователями и подписками, а также для практики разработки и администрирования Linux-сервисов.
+> Проект предназначен для личного использования и небольшого закрытого круга пользователей. Он не является коммерческой VPN-платформой, публичным сетевым сервисом или готовым продуктом для массового развёртывания.
+> Репозиторий в первую очередь служит учебным примером архитектуры небольшого сервиса: FastAPI-приложение управляет пользователями и подписками, генерирует конфигурации sing-box для нескольких узлов и автоматизирует их проверку и развёртывание.
 
-VPN Manager — простая панель управления пользователями, подписками и конфигурацией sing-box на базе FastAPI.
+VPN Manager — FastAPI-панель для управления пользователями, подписками и конфигурациями `sing-box`.
 
 Поддерживаются:
 
 - VLESS Reality;
 - Hysteria2;
 - несколько VPN-узлов;
-- единая ссылка подписки;
-- включение и отключение пользователей;
-- автоматический рендер и применение конфигурации;
-- проверка конфигурации и откат при ошибке.
+- роли `exit` и `ru-entry`;
+- локальный и SSH-deploy;
+- единая subscription-ссылка пользователя;
+- автоматическая публикация профилей со всех `publish`-нод;
+- Happ routing profile и автообновление подписки;
+- DNS hijack + DoH на exit-нодах;
+- автоматический render/deploy при изменении пользователей;
+- проверка конфигурации и rollback при ошибке.
 
 ## Архитектура
 
-В текущей конфигурации используются два узла:
+Конфигурация строится вокруг списка `nodes` в `base.json`.
 
-- **DE** — основной VPN-узел;
-- **RU** — экспериментальная точка входа.
+Поддерживаемые роли:
 
-При подключении к RU-узлу часть трафика направляется напрямую, а остальной трафик передаётся через туннель на DE-узел.
+- `exit` — обычная выходная VPN-нода;
+- `ru-entry` — входная нода: российский трафик может идти напрямую, остальной — через VLESS-туннель на основной exit.
 
-Один пользователь получает четыре профиля подключения:
+Текущая топология:
 
-~~~text
-DE VLESS Reality
-DE Hysteria2
-RU Experimental VLESS Reality
-RU Experimental Hysteria2
-~~~
+```text
+                    VPN user
+                       │
+              VLESS Reality / HY2
+                       │
+           ┌───────────┴───────────┐
+           ▼                       ▼
+       DE1 exit                DE2 exit
+       direct                  direct
+       DNS hijack              DNS hijack
+           ▲
+           │ VLESS tunnel
+           │
+        RU entry
+      RU → direct
+      rest → DE1
+```
 
-## Структура окружений
+Рендер и deploy не привязаны к фиксированному количеству exit-нод.
 
-### Development
+## Что генерируется для нод
 
-Локальная среда используется для разработки и проверки интерфейса, API, подписок и рендера конфигурации.
+### `role: "exit"`
 
-~~~text
+Для exit-ноды создаются:
+
+- VLESS Reality inbound;
+- Hysteria2 inbound;
+- `direct` outbound;
+- `sniff`;
+- DNS hijack;
+- блокировка BitTorrent;
+- `final: direct`.
+
+DNS клиентов перехватывается `sing-box` и резолвится через DoH:
+
+```text
+client DNS
+    ↓
+VPN tunnel
+    ↓
+hijack-dns
+    ↓
+https://1.1.1.1/dns-query
+```
+
+Используется `ipv4_only` DNS strategy.
+
+Если у exit-ноды задано:
+
+```json
+"accept_legacy_tunnel": true
+```
+
+добавляется inbound `ru-tunnel` для текущего RU → DE туннеля.
+
+### `role: "ru-entry"`
+
+Для RU Entry создаются:
+
+- VLESS Reality inbound;
+- Hysteria2 inbound;
+- `direct` outbound;
+- VLESS outbound `de-out`;
+- rule sets для direct-трафика;
+- `final: de-out`.
+
+DNS hijack на RU Entry намеренно не выполняется: DNS проходит через туннель и обрабатывается на exit-ноде.
+
+## Основные файлы
+
+```text
+server.py          FastAPI API, users, admin, subscriptions
+render.py          генерация sing-box-конфигов всех enabled-нод
+deploy.py          local/SSH deploy
+links.py           VLESS/HY2 URI и subscription URL
+subscriptions.py   subscription headers и Happ routing
+config.py          development/production пути
+templates/index.html
+requirements.txt
+```
+
+Runtime-файлы:
+
+```text
 users.json
 base.json
-rendered/de-config.json
-rendered/ru-config.json
-~~~
+client-routing.json
+```
 
-В development-режиме:
+Они не хранятся в Git.
 
-- не используется `sudo`;
-- не вызывается `systemctl`;
-- конфигурация sing-box не применяется;
-- production-серверы не затрагиваются.
+## `base.json`
 
-### Production
+`base.json` содержит инфраструктурную конфигурацию:
 
-Основные файлы:
+```text
+panel
+nodes
+  <node-name>
+    enabled
+    publish
+    role
+    deploy
+    meta
+    reality
+    hy2
+tunnel
+routing
+```
 
-~~~text
+Пример общих параметров ноды:
+
+```json
+{
+  "enabled": true,
+  "publish": true,
+  "role": "exit",
+  "deploy": {
+    "mode": "ssh",
+    "env_prefix": "DE2"
+  },
+  "meta": {
+    "location": "DE2"
+  },
+  "reality": {
+    "domain": "<node-domain>",
+    "listen_port": 443,
+    "server_name": "<handshake-host>",
+    "private_key": "<private-key>",
+    "public_key": "<public-key>",
+    "short_id": "<short-id>"
+  },
+  "hy2": {
+    "domain": "<node-domain>",
+    "listen_port": 8443,
+    "certificate_path": "<certificate-path>",
+    "key_path": "<key-path>"
+  }
+}
+```
+
+### Deploy mode
+
+Локальная нода:
+
+```json
+"deploy": {
+  "mode": "local"
+}
+```
+
+Удалённая нода:
+
+```json
+"deploy": {
+  "mode": "ssh",
+  "env_prefix": "DE2"
+}
+```
+
+Опционально можно переопределить:
+
+```json
+"remote_temp_file": "/tmp/vpn-manager-config.new.json",
+"remote_helper": "/usr/local/sbin/deploy-sing-box-config"
+```
+
+В текущей реализации допускается не более одной `local`-ноды.
+
+## Добавление новой ноды
+
+Для новой exit-ноды обычно достаточно:
+
+1. добавить её в `base.json`;
+2. указать `role: "exit"`;
+3. заполнить Reality/HY2;
+4. выбрать `deploy.mode`;
+5. для SSH-ноды добавить переменные окружения;
+6. установить `publish: true`, если нода должна появиться в подписках.
+
+После этого Python-код менять не требуется.
+
+Render автоматически создаст:
+
+```text
+/tmp/<node-name>-config.new.json
+```
+
+а subscription автоматически получит VLESS + HY2 для новой `publish`-ноды.
+
+## Подписки
+
+Пользователь получает один URL:
+
+```text
+https://<panel-host>:<port>/sub/<token>
+```
+
+В подписку попадают только ноды, у которых одновременно:
+
+```json
+"enabled": true,
+"publish": true
+```
+
+Для каждой такой ноды добавляются:
+
+```text
+VLESS Reality
+Hysteria2
+```
+
+### Happ routing
+
+Для Happ сервер дополнительно отдаёт routing profile через HTTP header `routing`:
+
+```text
+happ://routing/add/<base64-json>
+```
+
+Также включается автообновление подписки:
+
+```text
+subscription-auto-update-open-enable: 1
+```
+
+Интервал задаётся в `client-routing.json`:
+
+```json
+"update_interval_hours": 24
+```
+
+`client-routing.json` читается при каждом запросе `/sub/...`, поэтому его изменения не требуют рестарта `vpn-manager`.
+
+## Development
+
+По умолчанию:
+
+```text
+ENV=development
+```
+
+Используются:
+
+```text
+./users.json
+./base.json
+./client-routing.json
+./rendered/<node-name>-config.json
+```
+
+Проверка Python:
+
+```bash
+python -m py_compile render.py deploy.py server.py links.py subscriptions.py config.py
+```
+
+Рендер:
+
+```bash
+python render.py
+```
+
+Пример:
+
+```text
+Generated de: .../rendered/de-config.json
+Generated de2: .../rendered/de2-config.json
+Generated ru: .../rendered/ru-config.json
+```
+
+В development `render.py` только создаёт файлы и не применяет их к production.
+
+## Production
+
+Основные runtime-файлы:
+
+```text
 /opt/vpn-manager/users.json
 /opt/vpn-manager/base.json
-
-/tmp/de-config.new.json
-/tmp/ru-config.new.json
-
+/opt/vpn-manager/client-routing.json
 /etc/vpn-manager.env
-~~~
+```
 
-`users.json` содержит пользователей и их ключи.
+Сгенерированные конфиги:
 
-`base.json` содержит параметры узлов, протоколов, туннеля и маршрутизации.
+```text
+/tmp/<node-name>-config.new.json
+```
 
-## Production-настройки
+В `vpn-manager.service`:
 
-Параметры подключения к удалённому узлу хранятся вне Git:
-
-~~~ini
-RU_SSH_HOST=<ru-node-address>
-RU_SSH_USER=<ssh-user>
-RU_SSH_KEY=/root/.ssh/vpn-manager-ru
-~~~
-
-Файл настроек:
-
-~~~text
-/etc/vpn-manager.env
-~~~
-
-Рекомендуемые права:
-
-~~~bash
-sudo chown root:root /etc/vpn-manager.env
-sudo chmod 600 /etc/vpn-manager.env
-~~~
-
-В systemd-unit панели должен быть подключён файл окружения:
-
-~~~ini
+```ini
 [Service]
 Environment="ENV=production"
 EnvironmentFile=/etc/vpn-manager.env
-~~~
+```
+
+## SSH deploy
+
+Для удалённой ноды используются:
+
+```ini
+<PREFIX>_SSH_HOST=<host>
+<PREFIX>_SSH_USER=<user>
+<PREFIX>_SSH_KEY=<private-key-path>
+```
+
+Например при:
+
+```json
+"env_prefix": "DE2"
+```
+
+нужны:
+
+```ini
+DE2_SSH_HOST=<host>
+DE2_SSH_USER=<user>
+DE2_SSH_KEY=<key-path>
+```
+
+Если `env_prefix` не задан, он формируется из имени ноды: upper-case, `-` заменяется на `_`.
+
+Рекомендуемые права:
+
+```bash
+sudo chown root:root /etc/vpn-manager.env
+sudo chmod 600 /etc/vpn-manager.env
+```
 
 ## Sudoers
 
-Панель запускается от непривилегированного системного пользователя, но для применения конфигурации вызывает `deploy.py` через `sudo`.
+FastAPI-сервис работает от непривилегированного пользователя и вызывает `deploy.py` через `sudo`.
 
-Пример правила на основном сервере:
+Пример:
 
-~~~sudoers
-<service-user> ALL=(root) NOPASSWD: /opt/vpn-manager/venv/bin/python3 /opt/vpn-manager/deploy.py
-~~~
+```sudoers
+<service-user> ALL=(root) NOPASSWD: /opt/vpn-manager/venv/bin/python /opt/vpn-manager/deploy.py
+```
 
-`<service-user>` — системный пользователь, от которого запускается `vpn-manager.service`.
+На удалённых нодах SSH-пользователю разрешается запуск helper:
 
-На удалённом узле разрешён запуск отдельного deployment-helper:
-
-~~~sudoers
+```sudoers
 <ssh-user> ALL=(root) NOPASSWD: /usr/local/sbin/deploy-sing-box-config
-~~~
+```
 
-## Работа с пользователями
+Remote helper должен проверять новый конфиг, применять его, перезапускать `sing-box` и выполнять локальный rollback при ошибке.
 
-При создании, удалении, включении или отключении пользователя выполняется следующий процесс:
+## Изменение пользователей
 
-~~~text
+При создании, удалении, enable/disable пользователя:
+
+```text
+API request
+    ↓
 users.json
     ↓
 render.py
     ↓
-DE config + RU config
+/tmp/<node>-config.new.json
     ↓
 deploy.py
     ↓
-RU deploy
+remote nodes
     ↓
-DE deploy
-~~~
+local node
+```
 
-Сначала обновляется RU-узел.
+Перед изменением сохраняется предыдущая версия users-state.
 
-Если RU-узел не принял конфигурацию, конфигурация DE-узла не изменяется.
+Если render/deploy падает:
 
-Перед применением конфигурации выполняется проверка через:
+1. восстанавливается старый `users.json`;
+2. выполняется повторный render/deploy старой конфигурации;
+3. если rollback тоже падает, API возвращает отдельную ошибку rollback.
 
-~~~bash
-sing-box check
-~~~
+## Порядок deploy
 
-При ошибке запуска выполняется откат к предыдущей конфигурации.
+`deploy.py` делит enabled-ноды по `deploy.mode`:
 
-## Ручной рендер
+```text
+ssh   → remote nodes
+local → local node
+```
 
-На production-сервере:
+Сначала последовательно применяются удалённые ноды, затем локальная control-plane нода.
 
-~~~bash
+Если remote deploy падает, локальная нода не изменяется.
+
+При нескольких remote-нодах весь deploy не является одной атомарной транзакцией: ноды, успешно обновлённые до сбоя следующей ноды, уже могут содержать новый конфиг. API rollback затем повторно применяет предыдущую пользовательскую конфигурацию.
+
+## Ручной render на production
+
+```bash
 cd /opt/vpn-manager
 
 sudo ENV=production \
   /opt/vpn-manager/venv/bin/python render.py
-~~~
+```
 
-Результат:
+Проверка результатов:
 
-~~~text
-/tmp/de-config.new.json
-/tmp/ru-config.new.json
-~~~
+```bash
+ls -lh /tmp/*-config.new.json
+```
 
-Проверка DE-конфига:
+Проверка всех конфигов:
 
-~~~bash
-sudo sing-box check -c /tmp/de-config.new.json
-~~~
+```bash
+for f in /tmp/*-config.new.json; do
+  echo "== $f =="
+  sudo sing-box check -c "$f" || break
+done
+```
 
 ## Ручной deploy
 
-~~~bash
+```bash
 sudo /opt/vpn-manager/venv/bin/python \
   /opt/vpn-manager/deploy.py
-~~~
+```
 
-`deploy.py` всегда использует production-пути и выполняет:
+Успешное завершение:
 
-1. проверку наличия сгенерированных конфигов;
-2. загрузку RU-конфига;
-3. проверку и применение RU-конфига;
-4. применение DE-конфига;
-5. откат при ошибке.
+```text
+ALL NODES DEPLOYED
+```
+
+`deploy.py` сам выставляет production environment по умолчанию.
 
 ## Обновление production
 
-~~~bash
+```bash
 cd /opt/vpn-manager
 git pull
 
 sudo systemctl restart vpn-manager
 sudo systemctl status vpn-manager --no-pager
-~~~
+```
 
-Если менялась структура `base.json`, production-файл необходимо обновить вручную до запуска панели.
+`base.json`, `users.json` и `client-routing.json` не приезжают из Git. Если менялась их структура, production-копии обновляются отдельно.
 
-## Проверка журналов
+## Логи и диагностика
 
-Журнал панели:
+Панель:
 
-~~~bash
-sudo journalctl -u vpn-manager -n 50 --no-pager
-~~~
+```bash
+sudo journalctl -u vpn-manager -n 100 --no-pager
+```
 
-Журнал локального sing-box:
+Локальный `sing-box`:
 
-~~~bash
-sudo journalctl -u sing-box -n 50 --no-pager
-~~~
+```bash
+sudo journalctl -u sing-box -n 100 --no-pager
+```
 
-Журнал sing-box на удалённом узле:
+Удалённый `sing-box`:
 
-~~~bash
-ssh <ssh-user>@<ru-node-address>
-sudo journalctl -u sing-box -n 50 --no-pager
-~~~
+```bash
+ssh <user>@<host>
+sudo journalctl -u sing-box -n 100 --no-pager
+```
+
+Проверка DNS hijack на exit:
+
+```bash
+sudo tcpdump -nn -i eth0 'host 1.1.1.1 and (udp port 53 or tcp port 443)'
+```
+
+При нормальной работе upstream DNS идёт к `1.1.1.1` по HTTPS/TCP 443, а клиентский UDP/53 не выпускается наружу как обычный DNS-запрос.
+
+## Web API
+
+```text
+GET    /admin
+GET    /api/users
+POST   /api/user/create
+DELETE /api/user/{name}
+POST   /api/users/{name}/enable
+POST   /api/users/{name}/disable
+GET    /sub/{token}
+```
 
 ## Что не хранится в Git
 
-В репозиторий не должны попадать:
+`.gitignore` исключает:
 
-~~~text
+```text
 users.json
 base.json
+client-routing.json
 rendered/
-production IP-адреса
-SSH private keys
+.env
+TODO.md
+```
+
+Также в Git не должны попадать:
+
+```text
 /etc/vpn-manager.env
-~~~
+SSH private keys
+Reality private keys
+subscription tokens
+HY2 passwords
+production secrets
+```
 
 ## Временные файлы
 
-Панель рендерит конфиги от непривилегированного системного пользователя.
+Production render создаёт:
 
-Не следует вручную создавать файлы в `/tmp` через `sudo` и оставлять их владельцем `root`, иначе панель не сможет их перезаписать.
+```text
+/tmp/<node-name>-config.new.json
+```
 
-При необходимости временные файлы можно удалить:
+Не стоит вручную создавать эти файлы через `sudo` и оставлять владельцем `root`, если `vpn-manager` должен перезаписывать их от непривилегированного пользователя.
 
-~~~bash
-sudo rm -f \
-  /tmp/de-config.new.json \
-  /tmp/ru-config.new.json
-~~~
+Очистка:
 
-После этого панель создаст их заново с корректным владельцем.
+```bash
+sudo rm -f /tmp/*-config.new.json
+```
