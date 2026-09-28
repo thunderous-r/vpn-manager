@@ -3,277 +3,894 @@
 
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 
 <title>VPN Manager</title>
 
 <style>
-
-body{
-    font-family: Arial, sans-serif;
-    margin:40px;
-    background:#f5f5f5;
+:root {
+    --bg: #0b0f17;
+    --bg-elevated: #111827;
+    --panel: rgba(17, 24, 39, .92);
+    --panel-hover: #182235;
+    --border: #263244;
+    --border-soft: #1e293b;
+    --text: #e5e7eb;
+    --text-strong: #f8fafc;
+    --muted: #94a3b8;
+    --muted-2: #64748b;
+    --accent: #7c8cff;
+    --accent-hover: #93a0ff;
+    --accent-soft: rgba(124, 140, 255, .12);
+    --success: #34d399;
+    --success-soft: rgba(52, 211, 153, .12);
+    --danger: #fb7185;
+    --danger-hover: #fda4af;
+    --danger-soft: rgba(251, 113, 133, .1);
+    --warning: #fbbf24;
+    --shadow: 0 18px 50px rgba(0, 0, 0, .28);
+    --radius: 16px;
 }
 
-h1{
-    margin-top:0;
+* {
+    box-sizing: border-box;
 }
 
-.card{
-    background:white;
-    padding:20px;
-    border-radius:10px;
-    box-shadow:0 2px 8px rgba(0,0,0,.1);
-    margin-bottom:20px;
+html {
+    min-height: 100%;
+    background: var(--bg);
 }
 
-input{
-    padding:8px;
-    font-size:14px;
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--text);
+    background:
+        radial-gradient(circle at 15% 0%, rgba(124, 140, 255, .10), transparent 32rem),
+        radial-gradient(circle at 100% 20%, rgba(56, 189, 248, .05), transparent 28rem),
+        var(--bg);
 }
 
-button{
-    padding:8px 14px;
-    cursor:pointer;
+button,
+input {
+    font: inherit;
 }
 
-table{
-    width:100%;
-    border-collapse:collapse;
-    background:white;
+button {
+    border: 0;
 }
 
-th,td{
-    border:1px solid #ddd;
-    padding:10px;
-    text-align:left;
+.page {
+    width: min(1180px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 42px 0 64px;
 }
 
-th{
-    background:#f0f0f0;
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 28px;
 }
 
-.status-enabled{
-    color:green;
-    font-weight:bold;
+.header-main {
+    min-width: 0;
 }
 
-.status-disabled{
-    color:red;
-    font-weight:bold;
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--accent-hover);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
 }
 
-.actions button{
-    margin-right:5px;
+.eyebrow::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 14px rgba(52, 211, 153, .55);
 }
 
-.subscription{
-    max-width:350px;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    white-space:nowrap;
-    font-size:12px;
-    color:#666;
+h1 {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: clamp(30px, 5vw, 44px);
+    line-height: 1.05;
+    letter-spacing: -.035em;
 }
 
+.subtitle {
+    max-width: 680px;
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.65;
+}
+
+.header-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .72);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.card {
+    overflow: hidden;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(12px);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.card-title {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+
+.card-description {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.user-count {
+    flex: 0 0 auto;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: #b7c0ff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.create-form {
+    display: flex;
+    gap: 10px;
+    padding: 20px 22px;
+}
+
+.input {
+    width: min(100%, 420px);
+    height: 42px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    outline: none;
+    color: var(--text-strong);
+    background: #0d1420;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.input::placeholder {
+    color: var(--muted-2);
+}
+
+.input:hover {
+    background: #0f1724;
+}
+
+.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124, 140, 255, .12);
+}
+
+.btn {
+    display: inline-flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--text);
+    background: #182235;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 650;
+    white-space: nowrap;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, transform .08s ease;
+}
+
+.btn:hover {
+    border-color: #3b4a62;
+    background: #202c41;
+}
+
+.btn:active {
+    transform: translateY(1px);
+}
+
+.btn:focus-visible,
+.subscription-copy:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.btn-primary {
+    min-height: 42px;
+    padding: 0 16px;
+    border-color: transparent;
+    color: #fff;
+    background: var(--accent);
+}
+
+.btn-primary:hover {
+    border-color: transparent;
+    background: var(--accent-hover);
+}
+
+.btn-danger {
+    border-color: rgba(251, 113, 133, .28);
+    color: #fda4af;
+    background: transparent;
+}
+
+.btn-danger:hover {
+    border-color: rgba(251, 113, 133, .55);
+    color: #fecdd3;
+    background: var(--danger-soft);
+}
+
+.btn:disabled {
+    opacity: .55;
+    cursor: wait;
+}
+
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 15px 18px;
+    text-align: left;
+    vertical-align: middle;
+}
+
+th {
+    color: var(--muted);
+    background: rgba(15, 23, 42, .55);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+tbody tr {
+    border-top: 1px solid var(--border-soft);
+    transition: background .15s ease;
+}
+
+tbody tr:first-child {
+    border-top: 0;
+}
+
+tbody tr:hover {
+    background: rgba(30, 41, 59, .38);
+}
+
+.username {
+    color: var(--text-strong);
+    font-weight: 650;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.status-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-enabled {
+    color: var(--success);
+    background: var(--success-soft);
+}
+
+.status-disabled {
+    color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.subscription-cell {
+    width: 52%;
+    min-width: 280px;
+}
+
+.subscription-copy {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+
+.subscription-copy:hover {
+    border-color: var(--border);
+    color: #cbd5e1;
+    background: var(--panel-hover);
+}
+
+.subscription-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 12px;
+}
+
+.copy-glyph {
+    flex: 0 0 auto;
+    color: var(--muted-2);
+    font-size: 15px;
+    transition: color .15s ease;
+}
+
+.subscription-copy:hover .copy-glyph {
+    color: var(--accent-hover);
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+.actions-inner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.empty-state,
+.loading-state {
+    padding: 42px 20px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 14px;
+}
+
+.toast-container {
+    position: fixed;
+    z-index: 1000;
+    right: 22px;
+    bottom: 22px;
+    display: flex;
+    width: min(360px, calc(100vw - 44px));
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    color: var(--text);
+    background: #151e2d;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, .36);
+    font-size: 13px;
+    font-weight: 600;
+    animation: toast-in .18s ease-out;
+}
+
+.toast.success::before {
+    content: "✓";
+    color: var(--success);
+    font-weight: 900;
+}
+
+.toast.error::before {
+    content: "!";
+    display: grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    border-radius: 50%;
+    color: #111827;
+    background: var(--danger);
+    font-size: 11px;
+    font-weight: 900;
+}
+
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (max-width: 760px) {
+    .page {
+        width: min(100% - 24px, 1180px);
+        padding-top: 26px;
+    }
+
+    .header {
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .header-badge {
+        align-self: flex-start;
+    }
+
+    .create-form {
+        flex-direction: column;
+    }
+
+    .input,
+    .btn-primary {
+        width: 100%;
+    }
+
+    .card-header,
+    .create-form {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    table,
+    thead,
+    tbody,
+    tr,
+    th,
+    td {
+        display: block;
+    }
+
+    thead {
+        display: none;
+    }
+
+    tbody tr {
+        padding: 14px 16px;
+    }
+
+    td {
+        display: grid;
+        grid-template-columns: 92px minmax(0, 1fr);
+        gap: 12px;
+        padding: 8px 0;
+    }
+
+    td::before {
+        content: attr(data-label);
+        padding-top: 4px;
+        color: var(--muted-2);
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .subscription-cell {
+        width: auto;
+        min-width: 0;
+    }
+
+    .subscription-copy {
+        width: 100%;
+    }
+
+    .actions {
+        white-space: normal;
+    }
+
+    .actions-inner {
+        width: 100%;
+    }
+
+    .actions-inner .btn {
+        flex: 1 1 auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+}
 </style>
-
 </head>
 
 <body>
+<div class="page">
 
-<h1>VPN Manager</h1>
+<header class="header">
+    <div class="header-main">
+        <div class="eyebrow">Control panel</div>
+        <h1>VPN Manager</h1>
+        <p class="subtitle">
+            Users, subscriptions and sing-box access management in one place.
+        </p>
+    </div>
 
-<div class="card">
+    <div class="header-badge">FastAPI · sing-box</div>
+</header>
 
-<h2>Create user</h2>
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Create user</h2>
+            <p class="card-description">Generate a new user and subscription.</p>
+        </div>
+    </div>
 
-<input
-    id="username"
-    placeholder="Username">
+    <div class="create-form">
+        <input
+            class="input"
+            id="username"
+            placeholder="Username"
+            autocomplete="off"
+            spellcheck="false">
 
-<button onclick="createUser()">
-Create
-</button>
+        <button class="btn btn-primary" id="create-button" onclick="createUser()">
+            Create user
+        </button>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Users</h2>
+            <p class="card-description">Manage access and copy subscription links.</p>
+        </div>
+        <div class="user-count" id="user-count">0 users</div>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Subscription</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="users">
+                <tr>
+                    <td colspan="4" class="loading-state">Loading users…</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
 
 </div>
 
-<div class="card">
-
-<h2>Users</h2>
-
-<table>
-
-<thead>
-
-<tr>
-<th>User</th>
-<th>Status</th>
-<th>Subscription</th>
-<th>Actions</th>
-</tr>
-
-</thead>
-
-<tbody id="users">
-
-</tbody>
-
-</table>
-
-</div>
+<div class="toast-container" id="toast-container" aria-live="polite"></div>
 
 <script>
+const usersBody = document.getElementById("users");
+const userCount = document.getElementById("user-count");
+const usernameInput = document.getElementById("username");
+const createButton = document.getElementById("create-button");
 
-async function loadUsers(){
+function showToast(message, type = "success") {
+    const container = document.getElementById("toast-container");
+    const toast = document.createElement("div");
 
-    const users = await fetch("/api/users")
-        .then(r=>r.json());
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
 
-    const tbody=document.getElementById("users");
+    container.appendChild(toast);
 
-    tbody.innerHTML="";
-
-    for(const [name,user] of Object.entries(users)){
-
-        const sub = user.subscription;
-
-        tbody.innerHTML += `
-<tr>
-
-<td>${name}</td>
-
-<td class="${user.enabled ? "status-enabled":"status-disabled"}">
-${user.enabled ? "Enabled":"Disabled"}
-</td>
-
-<td class="subscription">
-${sub}
-</td>
-
-<td class="actions">
-
-<button onclick="copySubscription('${sub}')">
-Copy
-</button>
-
-<button onclick="toggleUser('${name}', ${user.enabled})">
-${user.enabled ? "Disable":"Enable"}
-</button>
-
-<button onclick="deleteUser('${name}')">
-Delete
-</button>
-
-</td>
-
-</tr>
-`;
-    }
-
+    window.setTimeout(() => {
+        toast.remove();
+    }, 2200);
 }
 
-async function createUser(){
+function createButtonElement(label, className, onClick) {
+    const button = document.createElement("button");
 
-    const input=document.getElementById("username");
+    button.type = "button";
+    button.className = `btn ${className || ""}`.trim();
+    button.textContent = label;
+    button.addEventListener("click", onClick);
 
-    const name=input.value.trim();
-
-    if(name===""){
-        alert("Enter username");
-        return;
-    }
-
-    const r=await fetch("/api/user/create",{
-
-        method:"POST",
-
-        headers:{
-            "Content-Type":"application/json"
-        },
-
-        body:JSON.stringify({
-            name:name
-        })
-
-    });
-
-    if(!r.ok){
-
-        alert(await r.text());
-
-        return;
-    }
-
-    input.value="";
-
-    loadUsers();
-
+    return button;
 }
 
-async function deleteUser(name){
+function createUserRow(name, user) {
+    const row = document.createElement("tr");
+    const sub = user.subscription;
 
-    if(!confirm("Delete "+name+" ?"))
-        return;
+    const userCell = document.createElement("td");
+    userCell.dataset.label = "User";
+    userCell.className = "username";
+    userCell.textContent = name;
 
-    await fetch("/api/user/"+encodeURIComponent(name),{
+    const statusCell = document.createElement("td");
+    statusCell.dataset.label = "Status";
 
-        method:"DELETE"
+    const statusBadge = document.createElement("span");
+    statusBadge.className = `status-badge ${user.enabled ? "status-enabled" : "status-disabled"}`;
+    statusBadge.textContent = user.enabled ? "Enabled" : "Disabled";
+    statusCell.appendChild(statusBadge);
 
-    });
+    const subscriptionCell = document.createElement("td");
+    subscriptionCell.dataset.label = "Subscription";
+    subscriptionCell.className = "subscription-cell";
 
-    loadUsers();
+    const subscriptionButton = document.createElement("button");
+    subscriptionButton.type = "button";
+    subscriptionButton.className = "subscription-copy";
+    subscriptionButton.title = "Click to copy subscription";
+    subscriptionButton.setAttribute("aria-label", `Copy subscription for ${name}`);
+    subscriptionButton.addEventListener("click", () => copySubscription(sub));
 
-}
+    const subscriptionText = document.createElement("span");
+    subscriptionText.className = "subscription-text";
+    subscriptionText.textContent = sub;
 
-async function toggleUser(name,enabled){
+    const copyGlyph = document.createElement("span");
+    copyGlyph.className = "copy-glyph";
+    copyGlyph.setAttribute("aria-hidden", "true");
+    copyGlyph.textContent = "⧉";
 
-    await fetch(
-        "/api/users/"+encodeURIComponent(name)+"/"+(enabled?"disable":"enable"),
-        {
-            method:"POST"
-        }
+    subscriptionButton.append(subscriptionText, copyGlyph);
+    subscriptionCell.appendChild(subscriptionButton);
+
+    const actionsCell = document.createElement("td");
+    actionsCell.dataset.label = "Actions";
+    actionsCell.className = "actions";
+
+    const actionsInner = document.createElement("div");
+    actionsInner.className = "actions-inner";
+
+    actionsInner.appendChild(
+        createButtonElement("Copy", "", () => copySubscription(sub))
     );
 
-    loadUsers();
+    actionsInner.appendChild(
+        createButtonElement(
+            user.enabled ? "Disable" : "Enable",
+            "",
+            () => toggleUser(name, user.enabled)
+        )
+    );
 
+    actionsInner.appendChild(
+        createButtonElement("Delete", "btn-danger", () => deleteUser(name))
+    );
+
+    actionsCell.appendChild(actionsInner);
+    row.append(userCell, statusCell, subscriptionCell, actionsCell);
+
+    return row;
 }
 
-function copySubscription(text) {
+async function loadUsers() {
+    try {
+        const response = await fetch("/api/users");
 
-    if (navigator.clipboard && window.isSecureContext) {
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
 
-        navigator.clipboard.writeText(text)
-            .then(() => alert("Subscription copied"))
-            .catch(console.error);
+        const users = await response.json();
+        const entries = Object.entries(users);
 
+        usersBody.innerHTML = "";
+        userCount.textContent = `${entries.length} ${entries.length === 1 ? "user" : "users"}`;
+
+        if (entries.length === 0) {
+            const row = document.createElement("tr");
+            const cell = document.createElement("td");
+
+            cell.colSpan = 4;
+            cell.className = "empty-state";
+            cell.textContent = "No users yet.";
+
+            row.appendChild(cell);
+            usersBody.appendChild(row);
+            return;
+        }
+
+        for (const [name, user] of entries) {
+            usersBody.appendChild(createUserRow(name, user));
+        }
+    } catch (error) {
+        usersBody.innerHTML = "";
+
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+
+        cell.colSpan = 4;
+        cell.className = "empty-state";
+        cell.textContent = "Failed to load users.";
+
+        row.appendChild(cell);
+        usersBody.appendChild(row);
+        showToast("Failed to load users", "error");
+        console.error(error);
+    }
+}
+
+async function createUser() {
+    const name = usernameInput.value.trim();
+
+    if (name === "") {
+        showToast("Enter a username", "error");
+        usernameInput.focus();
         return;
     }
 
-    const textarea = document.createElement("textarea");
-
-    textarea.value = text;
-    textarea.style.position = "fixed";
-    textarea.style.left = "-9999px";
-
-    document.body.appendChild(textarea);
-
-    textarea.focus();
-    textarea.select();
+    createButton.disabled = true;
 
     try {
-        document.execCommand("copy");
-        alert("Subscription copied");
-    } catch (e) {
-        prompt("Copy manually:", text);
-    }
+        const response = await fetch("/api/user/create", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ name })
+        });
 
-    document.body.removeChild(textarea);
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        usernameInput.value = "";
+        showToast(`User ${name} created`);
+        await loadUsers();
+    } catch (error) {
+        showToast(error.message || "Failed to create user", "error");
+    } finally {
+        createButton.disabled = false;
+        usernameInput.focus();
+    }
 }
 
-loadUsers();
+async function deleteUser(name) {
+    if (!confirm(`Delete ${name}?`)) {
+        return;
+    }
 
+    try {
+        const response = await fetch(
+            "/api/user/" + encodeURIComponent(name),
+            { method: "DELETE" }
+        );
+
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        showToast(`User ${name} deleted`);
+        await loadUsers();
+    } catch (error) {
+        showToast(error.message || "Failed to delete user", "error");
+    }
+}
+
+async function toggleUser(name, enabled) {
+    try {
+        const response = await fetch(
+            "/api/users/" + encodeURIComponent(name) + "/" + (enabled ? "disable" : "enable"),
+            { method: "POST" }
+        );
+
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        showToast(`${name} ${enabled ? "disabled" : "enabled"}`);
+        await loadUsers();
+    } catch (error) {
+        showToast(error.message || "Failed to update user", "error");
+    }
+}
+
+async function copySubscription(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement("textarea");
+
+            textarea.value = text;
+            textarea.style.position = "fixed";
+            textarea.style.left = "-9999px";
+
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            const copied = document.execCommand("copy");
+            textarea.remove();
+
+            if (!copied) {
+                throw new Error("Clipboard unavailable");
+            }
+        }
+
+        showToast("Subscription copied");
+    } catch (error) {
+        console.error(error);
+        showToast("Could not copy subscription", "error");
+    }
+}
+
+usernameInput.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+        createUser();
+    }
+});
+
+loadUsers();
 </script>
 
 </body>
-
 </html>
