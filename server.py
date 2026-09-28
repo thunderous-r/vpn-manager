@@ -19,13 +19,17 @@ from links import (
 )
 from render import render_config
 from subscriptions import render_subscription
+from stats import (
+    delete_user_stats,
+    get_overview,
+    get_user_details,
+    get_user_summaries,
+)
 
 
 app = FastAPI(title="VPN Manager")
 
-templates = Jinja2Templates(
-    directory=str(PROJECT_DIR / "templates")
-)
+templates = Jinja2Templates(directory=str(PROJECT_DIR / "templates"))
 
 
 class UserCreate(BaseModel):
@@ -50,9 +54,7 @@ def load_users():
     if not USERS_FILE.exists():
         return {}
 
-    return json.loads(
-        USERS_FILE.read_text(encoding="utf-8")
-    )
+    return json.loads(USERS_FILE.read_text(encoding="utf-8"))
 
 
 def find_user_by_token(token):
@@ -93,8 +95,7 @@ def save_users_and_apply(
 
         except Exception as rollback_error:
             raise RuntimeError(
-                "Config apply failed and rollback "
-                f"also failed: {rollback_error}"
+                f"Config apply failed and rollback also failed: {rollback_error}"
             ) from apply_error
 
         raise
@@ -113,12 +114,47 @@ def admin(request: Request):
 def get_users():
     users = load_users()
 
-    for user in users.values():
-        user["subscription"] = build_subscription_url(
-            user["token"]
-        )
+    try:
+        summaries = get_user_summaries(set(users))
+    except Exception as error:
+        print(f"Stats unavailable: {error}")
+        summaries = {}
+
+    for name, user in users.items():
+        user["subscription"] = build_subscription_url(user["token"])
+        user["stats"] = summaries.get(name, {})
 
     return users
+
+
+@app.get("/api/stats/overview")
+def stats_overview():
+    try:
+        return get_overview()
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Stats unavailable: {error}",
+        ) from error
+
+
+@app.get("/api/stats/users/{name}")
+def user_stats(name: str):
+    users = load_users()
+
+    if name not in users:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    try:
+        return get_user_details(name)
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Stats unavailable: {error}",
+        ) from error
 
 
 @app.post("/api/user/create")
@@ -175,10 +211,11 @@ def delete_user(name: str):
 
     del users[name]
 
-    save_users_and_apply(
-        users,
-        previous_users
-    )
+    save_users_and_apply(users, previous_users)
+    try:
+        delete_user_stats(name)
+    except Exception as error:
+        print(f"Failed to delete stats for {name}: {error}")
 
     return {
         "status": "deleted",
@@ -228,10 +265,7 @@ def disable_user(name: str):
 
     users[name]["enabled"] = False
 
-    save_users_and_apply(
-        users,
-        previous_users
-    )
+    save_users_and_apply(users, previous_users)
 
     return {
         "status": "disabled",
@@ -251,10 +285,7 @@ def enable_user(name: str):
 
     users[name]["enabled"] = True
 
-    save_users_and_apply(
-        users,
-        previous_users
-    )
+    save_users_and_apply(users, previous_users)
 
     return {
         "status": "enabled",
