@@ -63,7 +63,7 @@ button {
 }
 
 .page {
-    width: min(1180px, calc(100% - 40px));
+    width: min(1380px, calc(100% - 40px));
     margin: 0 auto;
     padding: 42px 0 64px;
 }
@@ -173,6 +173,181 @@ h1 {
     color: #b7c0ff;
     font-size: 12px;
     font-weight: 700;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--border-soft);
+}
+
+.metric {
+    min-width: 0;
+    padding: 20px 22px;
+    background: rgba(15, 23, 42, .38);
+}
+
+.metric-value {
+    color: var(--text-strong);
+    font-size: 27px;
+    font-weight: 760;
+    letter-spacing: -.035em;
+}
+
+.metric-label {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.activity-cell {
+    min-width: 210px;
+}
+
+.activity-main {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.activity-meta {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.risk-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.risk-normal {
+    color: var(--success);
+    background: var(--success-soft);
+}
+
+.risk-warning {
+    color: var(--warning);
+    background: rgba(251, 191, 36, .10);
+}
+
+.risk-critical {
+    color: var(--danger);
+    background: var(--danger-soft);
+}
+
+.modal-backdrop {
+    position: fixed;
+    z-index: 1200;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(2, 6, 23, .76);
+    backdrop-filter: blur(8px);
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.modal {
+    width: min(900px, 100%);
+    max-height: min(84vh, 820px);
+    overflow: auto;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: #0f1724;
+    box-shadow: 0 28px 90px rgba(0, 0, 0, .55);
+}
+
+.modal-header {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    background: rgba(15, 23, 36, .96);
+    backdrop-filter: blur(10px);
+}
+
+.modal-title {
+    margin: 0;
+    color: var(--text-strong);
+    font-size: 18px;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+.modal-stat {
+    padding: 13px;
+    border: 1px solid var(--border-soft);
+    border-radius: 11px;
+    background: rgba(15, 23, 42, .52);
+}
+
+.modal-stat strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-strong);
+    font-size: 16px;
+}
+
+.modal-stat span {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.section-title {
+    margin: 20px 0 10px;
+    color: var(--text-strong);
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.mini-table {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    border-radius: 11px;
+}
+
+.mini-table table {
+    font-size: 12px;
+}
+
+.mini-table th,
+.mini-table td {
+    padding: 10px 12px;
+}
+
+.muted {
+    color: var(--muted);
 }
 
 .create-form {
@@ -465,7 +640,7 @@ tbody tr:hover {
 
 @media (max-width: 760px) {
     .page {
-        width: min(100% - 24px, 1180px);
+        width: min(100% - 24px, 1380px);
         padding-top: 26px;
     }
 
@@ -480,6 +655,11 @@ tbody tr:hover {
 
     .create-form {
         flex-direction: column;
+    }
+
+    .stats-grid,
+    .modal-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .input,
@@ -602,6 +782,35 @@ tbody tr:hover {
 <section class="card">
     <div class="card-header">
         <div>
+            <h2 class="card-title">Usage overview</h2>
+            <p class="card-description">Live activity collected from sing-box across all nodes.</p>
+        </div>
+        <div class="user-count" id="active-now">0 active now</div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="metric">
+            <div class="metric-value" id="metric-users">0</div>
+            <div class="metric-label">Active users · 24h</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value" id="metric-connections">0</div>
+            <div class="metric-label">Connections · 24h</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value" id="metric-networks">0</div>
+            <div class="metric-label">User networks · 24h</div>
+        </div>
+        <div class="metric">
+            <div class="metric-value" id="metric-alerts">0</div>
+            <div class="metric-label">Leak alerts · 24h</div>
+        </div>
+    </div>
+</section>
+
+<section class="card">
+    <div class="card-header">
+        <div>
             <h2 class="card-title">Users</h2>
             <p class="card-description">Manage access and copy subscription links.</p>
         </div>
@@ -614,19 +823,32 @@ tbody tr:hover {
                 <tr>
                     <th>User</th>
                     <th>Status</th>
+                    <th>Activity</th>
                     <th>Subscription</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="users">
                 <tr>
-                    <td colspan="4" class="loading-state">Loading users…</td>
+                    <td colspan="5" class="loading-state">Loading users…</td>
                 </tr>
             </tbody>
         </table>
     </div>
 </section>
 
+</div>
+
+<div class="modal-backdrop" id="stats-modal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+        <div class="modal-header">
+            <h2 class="modal-title" id="stats-modal-title">User statistics</h2>
+            <button class="btn" type="button" onclick="closeStats()">Close</button>
+        </div>
+        <div class="modal-body" id="stats-modal-body">
+            <div class="loading-state">Loading statistics…</div>
+        </div>
+    </div>
 </div>
 
 <div class="toast-container" id="toast-container" aria-live="polite"></div>
@@ -636,6 +858,9 @@ const usersBody = document.getElementById("users");
 const userCount = document.getElementById("user-count");
 const usernameInput = document.getElementById("username");
 const createButton = document.getElementById("create-button");
+const statsModal = document.getElementById("stats-modal");
+const statsModalTitle = document.getElementById("stats-modal-title");
+const statsModalBody = document.getElementById("stats-modal-body");
 
 function showToast(message, type = "success") {
     const container = document.getElementById("toast-container");
@@ -662,6 +887,213 @@ function createButtonElement(label, className, onClick) {
     return button;
 }
 
+
+function formatNumber(value) {
+    return new Intl.NumberFormat().format(Number(value || 0));
+}
+
+function formatRelativeTime(timestamp) {
+    if (!timestamp) {
+        return "Never";
+    }
+
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+
+    if (seconds < 60) return `${seconds}s ago`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+    return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+function createRiskBadge(risk) {
+    const badge = document.createElement("span");
+    const safeRisk = ["normal", "warning", "critical"].includes(risk) ? risk : "normal";
+
+    badge.className = `risk-badge risk-${safeRisk}`;
+    badge.textContent = safeRisk === "normal" ? "OK" : safeRisk;
+    return badge;
+}
+
+function createActivityCell(stats = {}) {
+    const cell = document.createElement("td");
+    cell.dataset.label = "Activity";
+    cell.className = "activity-cell";
+
+    const main = document.createElement("div");
+    main.className = "activity-main";
+    main.appendChild(createRiskBadge(stats.risk || "normal"));
+
+    const lastSeen = document.createElement("span");
+    lastSeen.textContent = formatRelativeTime(stats.last_seen);
+    main.appendChild(lastSeen);
+
+    const meta = document.createElement("div");
+    meta.className = "activity-meta";
+
+    if (!stats.last_seen) {
+        meta.textContent = "No VPN activity recorded yet";
+    } else {
+        const nodeText = (stats.nodes_24h || []).join(", ") || "—";
+        const protocolText = (stats.protocols_24h || []).map(value => value === "hysteria2" ? "HY2" : value.toUpperCase()).join(" / ") || "—";
+        meta.textContent = `${formatNumber(stats.connections_24h)} conn · ${formatNumber(stats.networks_24h)} nets · ${nodeText} · ${protocolText}`;
+    }
+
+    cell.append(main, meta);
+    return cell;
+}
+
+async function loadOverview() {
+    try {
+        const response = await fetch("/api/stats/overview");
+        if (!response.ok) throw new Error(await response.text());
+
+        const data = await response.json();
+        document.getElementById("metric-users").textContent = formatNumber(data.active_users_24h);
+        document.getElementById("metric-connections").textContent = formatNumber(data.connections_24h);
+        document.getElementById("metric-networks").textContent = formatNumber(data.networks_24h);
+        document.getElementById("metric-alerts").textContent = formatNumber(data.alerts_24h);
+        document.getElementById("active-now").textContent = `${formatNumber(data.active_users_5m)} active now`;
+    } catch (error) {
+        console.error(error);
+        document.getElementById("active-now").textContent = "stats unavailable";
+    }
+}
+
+function buildMiniTable(headers, rows, emptyText) {
+    const wrap = document.createElement("div");
+    wrap.className = "mini-table";
+
+    if (rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = emptyText;
+        wrap.appendChild(empty);
+        return wrap;
+    }
+
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+
+    for (const header of headers) {
+        const th = document.createElement("th");
+        th.textContent = header;
+        headRow.appendChild(th);
+    }
+
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const rowValues of rows) {
+        const row = document.createElement("tr");
+        for (const value of rowValues) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        }
+        tbody.appendChild(row);
+    }
+
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    return wrap;
+}
+
+async function openStats(name) {
+    statsModal.classList.add("open");
+    statsModal.setAttribute("aria-hidden", "false");
+    statsModalTitle.textContent = `Statistics · ${name}`;
+    statsModalBody.innerHTML = '<div class="loading-state">Loading statistics…</div>';
+
+    try {
+        const response = await fetch("/api/stats/users/" + encodeURIComponent(name));
+        if (!response.ok) throw new Error(await response.text());
+
+        const data = await response.json();
+        const summary = data.summary || {};
+        statsModalBody.innerHTML = "";
+
+        const summaryGrid = document.createElement("div");
+        summaryGrid.className = "modal-summary";
+
+        const summaryItems = [
+            [formatRelativeTime(summary.last_seen), "Last seen"],
+            [formatNumber(summary.connections_24h), "Connections · 24h"],
+            [formatNumber(summary.networks_24h), "Networks · 24h"],
+            [formatNumber(summary.active_networks_5m), "Active networks · 5m"]
+        ];
+
+        for (const [value, label] of summaryItems) {
+            const item = document.createElement("div");
+            item.className = "modal-stat";
+            const strong = document.createElement("strong");
+            const span = document.createElement("span");
+            strong.textContent = value;
+            span.textContent = label;
+            item.append(strong, span);
+            summaryGrid.appendChild(item);
+        }
+
+        statsModalBody.appendChild(summaryGrid);
+
+        const usageTitle = document.createElement("div");
+        usageTitle.className = "section-title";
+        usageTitle.textContent = "Usage by node · 24h";
+        statsModalBody.appendChild(usageTitle);
+        statsModalBody.appendChild(buildMiniTable(
+            ["Node", "Protocol", "Connections"],
+            (data.usage_by_node_24h || []).map(item => [
+                item.node,
+                item.protocol === "hysteria2" ? "HY2" : item.protocol.toUpperCase(),
+                formatNumber(item.connections)
+            ]),
+            "No activity in the last 24 hours."
+        ));
+
+        const networksTitle = document.createElement("div");
+        networksTitle.className = "section-title";
+        networksTitle.textContent = "Recent source networks";
+        statsModalBody.appendChild(networksTitle);
+        statsModalBody.appendChild(buildMiniTable(
+            ["IP", "Network", "Node", "Protocol", "Last seen", "Connections"],
+            (data.recent_networks || []).map(item => [
+                item.sample_ip,
+                item.network_key,
+                item.node,
+                item.protocol === "hysteria2" ? "HY2" : item.protocol.toUpperCase(),
+                formatRelativeTime(item.last_seen),
+                formatNumber(item.connections)
+            ]),
+            "No source networks recorded yet."
+        ));
+
+        const alertsTitle = document.createElement("div");
+        alertsTitle.className = "section-title";
+        alertsTitle.textContent = "Leak alerts";
+        statsModalBody.appendChild(alertsTitle);
+        statsModalBody.appendChild(buildMiniTable(
+            ["Severity", "Active nets", "Node", "Protocol", "When"],
+            (data.recent_alerts || []).map(item => [
+                item.severity,
+                String(item.value ?? "—"),
+                item.details?.node || "—",
+                item.details?.protocol === "hysteria2" ? "HY2" : (item.details?.protocol || "—").toUpperCase(),
+                formatRelativeTime(item.created_at)
+            ]),
+            "No leak alerts."
+        ));
+    } catch (error) {
+        console.error(error);
+        statsModalBody.innerHTML = '<div class="empty-state">Failed to load statistics.</div>';
+    }
+}
+
+function closeStats() {
+    statsModal.classList.remove("open");
+    statsModal.setAttribute("aria-hidden", "true");
+}
+
 function createUserRow(name, user) {
     const row = document.createElement("tr");
     const sub = user.subscription;
@@ -678,6 +1110,8 @@ function createUserRow(name, user) {
     statusBadge.className = `status-badge ${user.enabled ? "status-enabled" : "status-disabled"}`;
     statusBadge.textContent = user.enabled ? "Enabled" : "Disabled";
     statusCell.appendChild(statusBadge);
+
+    const activityCell = createActivityCell(user.stats || {});
 
     const subscriptionCell = document.createElement("td");
     subscriptionCell.dataset.label = "Subscription";
@@ -710,6 +1144,10 @@ function createUserRow(name, user) {
     actionsInner.className = "actions-inner";
 
     actionsInner.appendChild(
+        createButtonElement("Stats", "", () => openStats(name))
+    );
+
+    actionsInner.appendChild(
         createButtonElement("Copy", "", () => copySubscription(sub))
     );
 
@@ -726,7 +1164,7 @@ function createUserRow(name, user) {
     );
 
     actionsCell.appendChild(actionsInner);
-    row.append(userCell, statusCell, subscriptionCell, actionsCell);
+    row.append(userCell, statusCell, activityCell, subscriptionCell, actionsCell);
 
     return row;
 }
@@ -749,7 +1187,7 @@ async function loadUsers() {
             const row = document.createElement("tr");
             const cell = document.createElement("td");
 
-            cell.colSpan = 4;
+            cell.colSpan = 5;
             cell.className = "empty-state";
             cell.textContent = "No users yet.";
 
@@ -767,7 +1205,7 @@ async function loadUsers() {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
 
-        cell.colSpan = 4;
+        cell.colSpan = 5;
         cell.className = "empty-state";
         cell.textContent = "Failed to load users.";
 
@@ -804,7 +1242,7 @@ async function createUser() {
 
         usernameInput.value = "";
         showToast(`User ${name} created`);
-        await loadUsers();
+        await Promise.all([loadUsers(), loadOverview()]);
     } catch (error) {
         showToast(error.message || "Failed to create user", "error");
     } finally {
@@ -829,7 +1267,7 @@ async function deleteUser(name) {
         }
 
         showToast(`User ${name} deleted`);
-        await loadUsers();
+        await Promise.all([loadUsers(), loadOverview()]);
     } catch (error) {
         showToast(error.message || "Failed to delete user", "error");
     }
@@ -847,7 +1285,7 @@ async function toggleUser(name, enabled) {
         }
 
         showToast(`${name} ${enabled ? "disabled" : "enabled"}`);
-        await loadUsers();
+        await Promise.all([loadUsers(), loadOverview()]);
     } catch (error) {
         showToast(error.message || "Failed to update user", "error");
     }
@@ -889,7 +1327,19 @@ usernameInput.addEventListener("keydown", event => {
     }
 });
 
-loadUsers();
+statsModal.addEventListener("click", event => {
+    if (event.target === statsModal) {
+        closeStats();
+    }
+});
+
+document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && statsModal.classList.contains("open")) {
+        closeStats();
+    }
+});
+
+Promise.all([loadUsers(), loadOverview()]);
 </script>
 
 </body>

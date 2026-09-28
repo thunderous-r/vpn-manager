@@ -1,0 +1,17 @@
+[Unit]
+Description=VPN Manager statistics collector
+After=network-online.target sing-box.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vpn-manager
+Environment="ENV=production"
+EnvironmentFile=/etc/vpn-manager.env
+ExecStart=/opt/vpn-manager/venv/bin/python /opt/vpn-manager/stats_collector.py
+Restart=always
+RestartSec=5
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target

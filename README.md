@@ -19,7 +19,9 @@ VPN Manager — FastAPI-панель для управления пользов�
 - Happ routing profile и автообновление подписки;
 - DNS hijack + DoH на exit-нодах;
 - автоматический render/deploy при изменении пользователей;
-- проверка конфигурации и rollback при ошибке.
+- проверка конфигурации и rollback при ошибке;
+- централизованная статистика активности пользователей по нодам, протоколам и source IP/network;
+- leak alerts по числу одновременно активных сетей.
 
 ## Архитектура
 
@@ -109,6 +111,8 @@ render.py          генерация sing-box-конфигов всех enabled
 deploy.py          local/SSH deploy
 links.py           VLESS/HY2 URI и subscription URL
 subscriptions.py   subscription headers и Happ routing
+stats.py           SQLite storage, агрегаты и leak detection
+stats_collector.py journal collector для local/SSH нод
 config.py          development/production пути
 templates/index.html
 requirements.txt
@@ -314,6 +318,7 @@ Generated ru: .../rendered/ru-config.json
 /opt/vpn-manager/users.json
 /opt/vpn-manager/base.json
 /opt/vpn-manager/client-routing.json
+/var/lib/vpn-manager/stats.db
 /etc/vpn-manager.env
 ```
 
@@ -505,11 +510,131 @@ sudo tcpdump -nn -i eth0 'host 1.1.1.1 and (udp port 53 or tcp port 443)'
 
 При нормальной работе upstream DNS идёт к `1.1.1.1` по HTTPS/TCP 443, а клиентский UDP/53 не выпускается наружу как обычный DNS-запрос.
 
+## Статистика активности
+
+Статистика собирается отдельным процессом `stats_collector.py`. Он читает journal `sing-box` локальной ноды напрямую, а удалённых нод — через существующие SSH-подключения из `base.json` + `/etc/vpn-manager.env`.
+
+Для VLESS и Hysteria2 в server-side users автоматически добавляется поле `name`. Благодаря этому collector связывает source IP с конкретным пользователем. Инфраструктурный RU → DE tunnel получает служебное имя `__ru_tunnel` и в пользовательскую статистику не попадает.
+
+Хранение:
+
+```text
+/var/lib/vpn-manager/stats.db
+```
+
+SQLite содержит:
+
+- `activity_ips` — агрегированная активность `user + node + network + protocol`;
+- `usage_hourly` — количество inbound connections по часам;
+- `abuse_state` — текущий уровень leak detection;
+- `security_events` — переходы в warning/critical.
+
+IPv4 считается отдельным адресом, IPv6 нормализуется до `/64`. Leak detection использует окно 5 минут:
+
+```text
+0..7 active networks  -> normal
+8..9 active networks  -> warning
+10+ active networks   -> critical
+```
+
+Автоматической блокировки нет: панель только подсвечивает подозрительную активность, после чего пользователя можно отключить вручную.
+
+### Доступ collector к journal
+
+Локальный collector запускается от root, поэтому локальный journal доступен без дополнительных прав. На каждой SSH-ноде пользователь из `<PREFIX>_SSH_USER` должен иметь право читать system journal:
+
+```bash
+sudo usermod -aG systemd-journal <ssh-user>
+```
+
+Новая SSH-сессия collector автоматически подхватит новую группу. Проверка с control-plane:
+
+```bash
+ssh <ssh-user>@<host> \
+  /usr/bin/journalctl -u sing-box -n 3 -o cat --no-pager
+```
+
+Если конкретная нода использует другое имя systemd unit, в `base.json` можно задать:
+
+```json
+"stats": {
+  "enabled": true,
+  "service": "sing-box-custom"
+}
+```
+
+По умолчанию статистика включена для всех enabled-нод и используется service `sing-box`. Для исключения ноды:
+
+```json
+"stats": {
+  "enabled": false
+}
+```
+
+### Systemd collector
+
+Создать каталог БД так, чтобы root collector и пользователь FastAPI имели доступ к SQLite/WAL-файлам:
+
+```bash
+SERVICE_USER=$(systemctl show -p User --value vpn-manager)
+SERVICE_GROUP=$(id -gn "$SERVICE_USER")
+
+sudo install -d \
+  -o root \
+  -g "$SERVICE_GROUP" \
+  -m 2770 \
+  /var/lib/vpn-manager
+```
+
+Unit `/etc/systemd/system/vpn-manager-stats.service`:
+
+```ini
+[Unit]
+Description=VPN Manager statistics collector
+After=network-online.target sing-box.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vpn-manager
+Environment="ENV=production"
+EnvironmentFile=/etc/vpn-manager.env
+ExecStart=/opt/vpn-manager/venv/bin/python /opt/vpn-manager/stats_collector.py
+Restart=always
+RestartSec=5
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Запуск:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now vpn-manager-stats
+sudo systemctl status vpn-manager-stats --no-pager
+```
+
+Логи collector:
+
+```bash
+sudo journalctl -u vpn-manager-stats -f
+```
+
+После добавления новой ноды в `base.json` collector нужно перезапустить, чтобы он открыл новый journal stream:
+
+```bash
+sudo systemctl restart vpn-manager-stats
+```
+
 ## Web API
 
 ```text
 GET    /admin
 GET    /api/users
+GET    /api/stats/overview
+GET    /api/stats/users/{name}
 POST   /api/user/create
 DELETE /api/user/{name}
 POST   /api/users/{name}/enable

@@ -9,9 +9,7 @@ from config import (
 
 
 def load_json(path: Path) -> dict:
-    return json.loads(
-        path.read_text(encoding="utf-8")
-    )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def write_config(path: Path, config: dict) -> Path:
@@ -34,8 +32,11 @@ def write_config(path: Path, config: dict) -> Path:
 
 def get_enabled_users(users: dict) -> list[dict]:
     return [
-        user
-        for user in users.values()
+        {
+            **user,
+            "name": name,
+        }
+        for name, user in users.items()
         if user.get("enabled", True)
     ]
 
@@ -45,7 +46,8 @@ def build_vless_users(
 ) -> list[dict]:
     return [
         {
-            "uuid": user["uuid"]
+            "name": user["name"],
+            "uuid": user["uuid"],
         }
         for user in enabled_users
     ]
@@ -56,7 +58,8 @@ def build_hy2_users(
 ) -> list[dict]:
     return [
         {
-            "password": user["hy2_password"]
+            "name": user["name"],
+            "password": user["hy2_password"],
         }
         for user in enabled_users
     ]
@@ -84,9 +87,7 @@ def build_reality_inbound(
                     "server_port": 443,
                 },
                 "private_key": reality["private_key"],
-                "short_id": [
-                    reality["short_id"]
-                ],
+                "short_id": [reality["short_id"]],
             },
         },
     }
@@ -191,24 +192,21 @@ def build_exit_config(
                 "listen_port": tunnel["listen_port"],
                 "users": [
                     {
-                        "uuid": tunnel["uuid"]
+                        "name": "__ru_tunnel",
+                        "uuid": tunnel["uuid"],
                     }
                 ],
                 "tls": {
                     "enabled": True,
                     "server_name": tunnel["server_name"],
-                    "certificate_path": tunnel[
-                        "certificate_path"
-                    ],
+                    "certificate_path": tunnel["certificate_path"],
                     "key_path": tunnel["key_path"],
                 },
             }
         )
 
     return {
-        "log": {
-            "level": "info"
-        },
+        "log": {"level": "info"},
         "dns": build_dns(),
         "inbounds": inbounds,
         "outbounds": [
@@ -235,9 +233,7 @@ def build_ru_entry_config(
     routing = base["routing"]
 
     return {
-        "log": {
-            "level": "info"
-        },
+        "log": {"level": "info"},
         "experimental": {
             "cache_file": {
                 "enabled": True,
@@ -276,9 +272,7 @@ def build_ru_entry_config(
             "rules": [
                 *build_entry_rules(),
                 {
-                    "rule_set": routing[
-                        "direct_rule_sets"
-                    ],
+                    "rule_set": routing["direct_rule_sets"],
                     "outbound": "direct",
                 },
             ],
@@ -293,13 +287,9 @@ def render_config() -> dict[str, Path]:
 
     enabled_users = get_enabled_users(users)
 
-    vless_users = build_vless_users(
-        enabled_users
-    )
+    vless_users = build_vless_users(enabled_users)
 
-    hy2_users = build_hy2_users(
-        enabled_users
-    )
+    hy2_users = build_hy2_users(enabled_users)
 
     outputs = {}
 
@@ -326,10 +316,7 @@ def render_config() -> dict[str, Path]:
             )
 
         else:
-            raise RuntimeError(
-                f"Unsupported role for node "
-                f"{node_name!r}: {role!r}"
-            )
+            raise RuntimeError(f"Unsupported role for node {node_name!r}: {role!r}")
 
         output = write_config(
             rendered_config_file(node_name),
@@ -345,6 +332,4 @@ if __name__ == "__main__":
     outputs = render_config()
 
     for node_name, output in outputs.items():
-        print(
-            f"Generated {node_name}: {output}"
-        )
+        print(f"Generated {node_name}: {output}")
