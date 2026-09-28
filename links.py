@@ -4,18 +4,14 @@ from config import BASE_FILE
 
 
 def load_base():
-    return json.loads(
-        BASE_FILE.read_text(encoding="utf-8")
-    )
+    return json.loads(BASE_FILE.read_text(encoding="utf-8"))
 
 
 def get_node(base: dict, node_name: str) -> dict:
     try:
         return base["nodes"][node_name]
     except KeyError as error:
-        raise RuntimeError(
-            f"Unknown VPN node: {node_name}"
-        ) from error
+        raise RuntimeError(f"Unknown VPN node: {node_name}") from error
 
 
 def build_vless_uri(
@@ -38,7 +34,7 @@ def build_vless_uri(
         f"@{reality['domain']}:{reality['listen_port']}"
         f"?security=reality"
         f"&sni={reality['server_name']}"
-        f"&fp=chrome"
+        f"&fp=firefox"
         f"&pbk={reality['public_key']}"
         f"&sid={reality['short_id']}"
         f"&type=tcp"
@@ -110,8 +106,4 @@ def build_subscription_url(token: str):
     panel = base["panel"]
     scheme = panel.get("scheme", "https")
 
-    return (
-        f"{scheme}://{panel['domain']}"
-        f":{panel['port']}"
-        f"/sub/{token}"
-    )
+    return f"{scheme}://{panel['domain']}:{panel['port']}/sub/{token}"
