@@ -28,14 +28,13 @@ def encode_base64_text(value: str) -> str:
     ).decode("ascii")
 
 
-def build_happ_routing_link(profile: dict) -> str:
+def build_routing_profile(profile: dict) -> dict:
     remote_dns = profile["remote_dns"]
     domestic_dns = profile["domestic_dns"]
 
-    happ_profile = {
+    return {
         "Name": profile["name"],
-        # Keep the types exactly like the working provider profile
-        # we inspected: Happ accepts these values as strings.
+        # Keep these values as strings for Happ/INCY compatibility.
         "GlobalProxy": (
             "true" if profile.get("global_proxy", True) else "false"
         ),
@@ -64,17 +63,27 @@ def build_happ_routing_link(profile: dict) -> str:
         ),
     }
 
+
+def encode_routing_profile(profile: dict) -> str:
     raw = json.dumps(
-        happ_profile,
+        build_routing_profile(profile),
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
 
-    encoded = base64.b64encode(raw).decode("ascii")
+    return base64.b64encode(raw).decode("ascii")
 
-    # add updates the profile but does not forcibly activate it
-    # on every subscription refresh.
+
+def build_happ_routing_link(profile: dict) -> str:
+    encoded = encode_routing_profile(profile)
+
     return f"happ://routing/add/{encoded}"
+
+
+def build_incy_routing_link(profile: dict) -> str:
+    encoded = encode_routing_profile(profile)
+
+    return f"incy://routing/add/{encoded}"
 
 
 def build_common_headers(config: dict) -> dict[str, str]:
@@ -104,15 +113,19 @@ def render_subscription(
 ) -> tuple[str, dict[str, str]]:
     config = load_client_routing()
     headers = build_common_headers(config)
+    client = user_agent.lower()
+    profile = get_default_routing_profile(config)
 
-    if "happ" in user_agent.lower():
-        profile = get_default_routing_profile(config)
-
+    if "happ" in client:
         if profile is not None:
             headers["routing"] = build_happ_routing_link(profile)
 
         # Happ-specific switch: enable automatic subscription
         # refreshes; profile-update-interval above sets the cadence.
         headers["subscription-auto-update-open-enable"] = "1"
+
+    elif "incy" in client:
+        if profile is not None:
+            headers["routing"] = build_incy_routing_link(profile)
 
     return "\n".join(links), headers

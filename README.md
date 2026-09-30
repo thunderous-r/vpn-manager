@@ -16,7 +16,8 @@ VPN Manager — FastAPI-панель для управления пользов�
 - локальный и SSH-deploy;
 - единая subscription-ссылка пользователя;
 - автоматическая публикация профилей со всех `publish`-нод;
-- Happ routing profile и автообновление подписки;
+- Happ и INCY routing profiles;
+- автообновление подписки Happ;
 - DNS hijack + DoH на exit-нодах;
 - автоматический render/deploy при изменении пользователей;
 - проверка конфигурации и rollback при ошибке;
@@ -249,9 +250,11 @@ VLESS Reality
 Hysteria2
 ```
 
-### Happ routing
+### Client routing
 
-Для Happ сервер дополнительно отдаёт routing profile через HTTP header `routing`:
+Для поддерживаемых клиентов сервер дополнительно отдаёт routing profile через HTTP header `routing`:
+
+Happ:
 
 ```text
 happ://routing/add/<base64-json>
@@ -262,6 +265,14 @@ happ://routing/add/<base64-json>
 ```text
 subscription-auto-update-open-enable: 1
 ```
+
+INCY:
+
+```text
+incy://routing/add/<base64-json>
+```
+
+Happ и INCY используют общий routing profile из `client-routing.json`.
 
 Интервал задаётся в `client-routing.json`:
 
