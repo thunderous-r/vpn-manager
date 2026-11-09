@@ -14,6 +14,24 @@ def get_node(base: dict, node_name: str) -> dict:
         raise RuntimeError(f"Unknown VPN node: {node_name}") from error
 
 
+def get_protocol_backend(base: dict, node: dict) -> dict:
+    """Return exit's credentials for a TCP/UDP pass-through relay."""
+    if node.get("role") != "relay":
+        return node
+    target_name = node.get("relay_to")
+    target = base.get("nodes", {}).get(target_name)
+    if (
+        not target_name
+        or not target
+        or not target.get("enabled", True)
+        or target.get("role") != "exit"
+    ):
+        raise RuntimeError(
+            f"Relay backend {target_name!r} must be an enabled exit node"
+        )
+    return target
+
+
 def build_vless_uri(
     uuid: str,
     name: str,
@@ -22,7 +40,8 @@ def build_vless_uri(
     base = load_base()
     node = get_node(base, node_name)
 
-    reality = node["reality"]
+    entry = node["reality"]
+    reality = get_protocol_backend(base, node)["reality"]
     location = node["meta"]["location"]
     label = quote(
         f"{location}-Reality-{name}",
@@ -31,7 +50,7 @@ def build_vless_uri(
 
     return (
         f"vless://{uuid}"
-        f"@{reality['domain']}:{reality['listen_port']}"
+        f"@{entry['domain']}:{entry['listen_port']}"
         f"?security=reality"
         f"&sni={reality['server_name']}"
         f"&fp=firefox"
@@ -51,7 +70,8 @@ def build_hy2_uri(
     base = load_base()
     node = get_node(base, node_name)
 
-    hy2 = node["hy2"]
+    entry = node["hy2"]
+    hy2 = get_protocol_backend(base, node)["hy2"]
     location = node["meta"]["location"]
     label = quote(
         f"{location}-HY2-{name}",
@@ -60,7 +80,7 @@ def build_hy2_uri(
 
     return (
         f"hy2://{password}"
-        f"@{hy2['domain']}:{hy2['listen_port']}/"
+        f"@{entry['domain']}:{entry['listen_port']}/"
         f"?sni={hy2['domain']}"
         f"#{label}"
     )

@@ -324,6 +324,10 @@ def deploy_configs() -> None:
         if not node.get("enabled", True):
             continue
 
+        if node.get("role") == "relay":
+            print(f"{node_name}: nginx stream relay, sing-box deploy skipped")
+            continue
+
         deploy = node.get("deploy")
 
         if not deploy:

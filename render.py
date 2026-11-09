@@ -297,6 +297,21 @@ def render_config() -> dict[str, Path]:
         if not node.get("enabled", True):
             continue
 
+        if node.get("role") == "relay":
+            backend_name = node.get("relay_to")
+            backend = base.get("nodes", {}).get(backend_name)
+            if (
+                not backend_name
+                or backend_name == node_name
+                or not backend
+                or not backend.get("enabled", True)
+                or backend.get("role") != "exit"
+            ):
+                raise RuntimeError(
+                    f"{node_name}: relay_to must reference an enabled exit node"
+                )
+            continue
+
         role = node.get("role")
 
         if role == "exit":
