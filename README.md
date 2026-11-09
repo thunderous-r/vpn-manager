@@ -12,8 +12,8 @@ VPN Manager — FastAPI-панель для управления пользов�
 - VLESS Reality;
 - Hysteria2;
 - несколько VPN-узлов;
-- роли `exit` и `ru-entry`;
-- локальный и SSH-deploy;
+- роли `exit` и `relay` (и совместимость с прежней `ru-entry`);
+- локальный и SSH-deploy конфигураций sing-box для exit-нод;
 - единая subscription-ссылка пользователя;
 - автоматическая публикация профилей со всех `publish`-нод;
 - Happ и INCY routing profiles;
@@ -24,36 +24,43 @@ VPN Manager — FastAPI-панель для управления пользов�
 - централизованная статистика активности пользователей по нодам, протоколам и source IP/network;
 - leak alerts по числу одновременно активных сетей.
 
+
 ## Архитектура
 
-Конфигурация строится вокруг списка `nodes` в `base.json`.
+Панель управления (control-plane) работает на **DE1**. Топология и параметры узлов описаны в локальном `base.json`.
 
-Поддерживаемые роли:
-
-- `exit` — обычная выходная VPN-нода;
-- `ru-entry` — входная нода: российский трафик может идти напрямую, остальной — через VLESS-туннель на основной exit.
-
-Текущая топология:
+- **DE1** — основной `exit`, локальный sing-box и выход в интернет.
+- **DE2** — дополнительный `exit`, sing-box обновляется по SSH.
+- **RU Relay** — входной L4 TCP/UDP relay: Nginx Stream передаёт зашифрованный трафик на DE1, не завершая VLESS Reality или Hysteria2.
 
 ```text
-                    VPN user
-                       │
-              VLESS Reality / HY2
-                       │
-           ┌───────────┴───────────┐
-           ▼                       ▼
-       DE1 exit                DE2 exit
-       direct                  direct
-       DNS hijack              DNS hijack
-           ▲
-           │ VLESS tunnel
-           │
-        RU entry
-      RU → direct
-      rest → DE1
+                         VPN client
+                             │
+             ┌───────────────┼─────────────────┐
+             │               │                 │
+             ▼               ▼                 ▼
+         DE1:443/TCP      DE2 exit        RU Relay:8444/TCP
+         DE1:8443/UDP                    RU Relay:18443/UDP
+             │                                  │
+             │                                  ▼
+             │                              nginx stream
+             │                                  │
+             ◄──────────────────────────────────┘
+             ▼
+       DE1 sing-box
+        exit / DNS
+             │
+             ▼
+          Internet
 ```
 
-Рендер и deploy не привязаны к фиксированному количеству exit-нод.
+Прямые подключения к DE1/DE2 остаются самостоятельными. RU Relay не имеет собственного sing-box: авторизация пользователей, TLS/Reality/HY2 и выходной IP определяются DE1. На RU нет локальных правил `direct`, GeoIP/Geosite или DNS hijack VPN-клиентов.
+
+**Граница ответственности:** VPN Manager публикует конфигурации relay-профилей и обновляет sing-box на exit-нодах, **но не управляет Nginx Stream на RU**. Его конфигурация и systemd-unit настраиваются отдельно.
+
+Важно: L4 relay сохраняет зашифрованный клиентский протокол, но DE1 видит сетевой адрес RU как источник проксированного соединения. Реальный source IP VPN-клиента на DE1 таким способом не передаётся; это следует учитывать при анализе статистики по IP и leak alerts.
+
+Роль `ru-entry` и связанная split-routing логика сохранены в коде для обратной совместимости, но в текущей рабочей схеме не используются. Render/deploy не привязаны к фиксированному числу exit-нод.
 
 ## Что генерируется для нод
 
@@ -91,26 +98,59 @@ https://1.1.1.1/dns-query
 
 добавляется inbound `ru-tunnel` для текущего RU → DE туннеля.
 
-### `role: "ru-entry"`
 
-Для RU Entry создаются:
+### `role: "relay"`
 
-- VLESS Reality inbound;
-- Hysteria2 inbound;
-- `direct` outbound;
-- VLESS outbound `de-out`;
-- rule sets для direct-трафика;
-- `final: de-out`.
+Relay-нода не генерирует sing-box-конфиг и пропускается `deploy.py`. В `base.json` она задаёт:
 
-DNS hijack на RU Entry намеренно не выполняется: DNS проходит через туннель и обрабатывается на exit-ноде.
+- `role: "relay"` и `relay_to` — имя включённой ноды с ролью `exit`;
+- собственные `reality.domain` / `reality.listen_port` и `hy2.domain` / `hy2.listen_port` — адрес и порты входа для клиентов;
+- `meta.location` — отображаемое имя профилей;
+- `publish` — включение в подписки.
+
+Ключи Reality (`public_key`, `short_id`, `server_name`), HY2 SNI и учётные данные пользователей при построении ссылки берутся с `relay_to`. Адрес и порт в ссылке остаются от relay-ноды. Поэтому на входном relay не нужны собственные TLS/Reality-ключи для обработки клиентских VPN-подключений.
+
+Пример **Nginx Stream** на RU (часть самостоятельного Nginx-конфига, не генерируется Python):
+
+```nginx
+stream {
+    server {
+        listen 0.0.0.0:8444;
+        proxy_pass DE1_IPV4:443;
+        proxy_connect_timeout 5s;
+        proxy_timeout 1h;
+    }
+
+    server {
+        listen 0.0.0.0:18443 udp reuseport;
+        proxy_pass DE1_IPV4:8443;
+        proxy_timeout 10m;
+    }
+}
+```
+
+Заменить `DE1_IPV4` на актуальный IPv4 DE1. В рабочей установке используется отдельный `vpn-manager-stream-relay.service` с конфигом `/etc/nginx/vpn-manager-stream.conf`. Этот экземпляр Nginx проверяется и перезапускается независимо от VPN Manager:
+
+```bash
+sudo nginx -t -c /etc/nginx/vpn-manager-stream.conf
+sudo systemctl status vpn-manager-stream-relay --no-pager
+```
+
+Изменение адреса или порта backend требует отдельного обновления Nginx; изменение клиентского адреса/порта — обновления `base.json` и подписок.
+
+### `role: "ru-entry"` (legacy)
+
+Старый режим с локальными VLESS Reality/HY2 inbounds, `direct`, VLESS outbound `de-out`, GeoIP/Geosite rule sets и `final: de-out` всё ещё поддерживается генератором, но не используется на RU после перехода на L4 relay.
+
+Если на exit-ноде задано `"accept_legacy_tunnel": true`, она также получает inbound `ru-tunnel` для старой схемы. Для чистого L4 relay он не требуется.
 
 ## Основные файлы
 
 ```text
 server.py          FastAPI API, users, admin, subscriptions
-render.py          генерация sing-box-конфигов всех enabled-нод
-deploy.py          local/SSH deploy
-links.py           VLESS/HY2 URI и subscription URL
+render.py          генерация sing-box-конфигов exit/legacy-нод; пропуск relay
+deploy.py          local/SSH deploy sing-box, пропуск relay
+links.py           VLESS/HY2 URI, backend-параметры relay, subscription URL
 subscriptions.py   subscription headers и Happ routing
 stats.py           SQLite storage, агрегаты и leak detection
 stats_collector.py journal collector для local/SSH нод
@@ -140,12 +180,14 @@ nodes
     enabled
     publish
     role
-    deploy
+    relay_to  # для relay
+    deploy    # для exit/legacy
+    stats
     meta
     reality
     hy2
-tunnel
-routing
+tunnel  # legacy
+routing # legacy
 ```
 
 Пример общих параметров ноды:
@@ -207,26 +249,47 @@ routing
 
 В текущей реализации допускается не более одной `local`-ноды.
 
+
 ## Добавление новой ноды
 
-Для новой exit-ноды обычно достаточно:
+### Exit-нода
 
-1. добавить её в `base.json`;
-2. указать `role: "exit"`;
-3. заполнить Reality/HY2;
-4. выбрать `deploy.mode`;
-5. для SSH-ноды добавить переменные окружения;
-6. установить `publish: true`, если нода должна появиться в подписках.
+Для новой exit-ноды:
 
-После этого Python-код менять не требуется.
+1. Добавить её в `base.json` с `role: "exit"` и Reality/HY2-параметрами.
+2. Указать `deploy.mode` (`local` или `ssh`) и переменные окружения SSH, если необходимо.
+3. Установить `publish: true`, чтобы нода вошла в подписки.
 
-Render автоматически создаст:
+Для включённой exit-ноды render создаёт `/tmp/<node-name>-config.new.json`. Далее `deploy.py` проверяет и применяет sing-box-конфиг.
 
-```text
-/tmp/<node-name>-config.new.json
+### L4 relay-нода
+
+В текущем развёртывании опубликованная входная нода называется `ru-relay`. Минимальная структура её записи:
+
+```json
+{
+  "enabled": true,
+  "publish": true,
+  "role": "relay",
+  "relay_to": "de",
+  "meta": {"location": "RU→DE Relay"},
+  "reality": {
+    "domain": "ru.dntun.com",
+    "listen_port": 8444
+  },
+  "hy2": {
+    "domain": "ru.dntun.com",
+    "listen_port": 18443
+  },
+  "stats": {"enabled": false}
+}
 ```
 
-а subscription автоматически получит VLESS + HY2 для новой `publish`-ноды.
+Это **пример содержимого `nodes.ru-relay`**, а не всего файла `base.json`. Имя `de` должно соответствовать существующему ключу exit-ноды в `nodes`. У relay отсутствует обязательный `deploy`: Python не устанавливает Nginx-конфигурацию.
+
+Старую запись `nodes.ru` можно сохранить для отката с `publish: false` и `role: "relay"`, если у неё тоже есть корректный `relay_to`. Если она остаётся `enabled: true`, для неё также следует задать `stats.enabled: false`. Для восстановления устаревших VLESS/HY2-ссылок одного изменения `publish` недостаточно: тогда понадобится вернуть и старую схему sing-box.
+
+Перед публикацией проверить доступность обоих портов relay и корректность ключей/SNI backend. У клиента в подписке изменяются адрес/порт входа, но не backend-учётные данные.
 
 ## Подписки
 
@@ -249,6 +312,8 @@ https://<panel-host>:<port>/sub/<token>
 VLESS Reality
 Hysteria2
 ```
+
+Для `relay` ссылки указывают на входной домен/порт RU, а Reality public key, short ID, SNI и HY2 SNI берутся с указанного exit backend. В подписку **не попадают** ноды с `publish: false`, даже когда они `enabled: true`. Изменения `base.json` учитываются при следующем запросе подписки.
 
 ### Client routing
 
@@ -316,10 +381,9 @@ python render.py
 ```text
 Generated de: .../rendered/de-config.json
 Generated de2: .../rendered/de2-config.json
-Generated ru: .../rendered/ru-config.json
 ```
 
-В development `render.py` только создаёт файлы и не применяет их к production.
+В development `render.py` только создаёт файлы и не применяет их к production. Для relay-ноды выходной sing-box JSON не создаётся.
 
 ## Production
 
@@ -349,7 +413,7 @@ EnvironmentFile=/etc/vpn-manager.env
 
 ## SSH deploy
 
-Для удалённой ноды используются:
+Для удалённой **exit-ноды**, управляющейся через SSH deploy, используются:
 
 ```ini
 <PREFIX>_SSH_HOST=<host>
@@ -398,9 +462,10 @@ FastAPI-сервис работает от непривилегированно�
 
 Remote helper должен проверять новый конфиг, применять его, перезапускать `sing-box` и выполнять локальный rollback при ошибке.
 
+
 ## Изменение пользователей
 
-При создании, удалении, enable/disable пользователя:
+При создании, удалении и enable/disable пользователя выполняются:
 
 ```text
 API request
@@ -408,45 +473,41 @@ API request
 users.json
     ↓
 render.py
-    ↓
-/tmp/<node>-config.new.json
+    ├── exit/legacy → sing-box config
+    └── relay → skip
     ↓
 deploy.py
-    ↓
-remote nodes
-    ↓
-local node
+    ├── SSH exit-ноды
+    ├── local exit-нода (control-plane, последней)
+    └── relay → skip
 ```
 
-Перед изменением сохраняется предыдущая версия users-state.
+Учётные данные пользователей на exit-нодах общие; на RU Relay пользовательская аутентификация выполняется DE1.
 
-Если render/deploy падает:
-
-1. восстанавливается старый `users.json`;
-2. выполняется повторный render/deploy старой конфигурации;
-3. если rollback тоже падает, API возвращает отдельную ошибку rollback.
+Перед изменением сохраняется предыдущая версия `users.json`. Если render/deploy падает, приложение восстанавливает `users.json` и повторяет применение предыдущей конфигурации; сбой rollback возвращается как отдельная ошибка.
 
 ## Порядок deploy
 
-`deploy.py` делит enabled-ноды по `deploy.mode`:
+`deploy.py` сначала **исключает `role: "relay"`**, затем делит оставшиеся enabled-ноды по `deploy.mode`:
 
 ```text
-ssh   → remote nodes
-local → local node
+ssh   → remote exit nodes
+local → control-plane exit node
+relay → skipped
 ```
 
-Сначала последовательно применяются удалённые ноды, затем локальная control-plane нода.
+Удалённые ноды обновляются последовательно до локальной. При сбое remote deploy локальная нода ещё не меняется. Обновление нескольких удалённых нод не атомарно; rollback API повторно применяет предыдущее состояние пользователей, если это возможно.
 
-Если remote deploy падает, локальная нода не изменяется.
-
-При нескольких remote-нодах весь deploy не является одной атомарной транзакцией: ноды, успешно обновлённые до сбоя следующей ноды, уже могут содержать новый конфиг. API rollback затем повторно применяет предыдущую пользовательскую конфигурацию.
+`deploy.py` не заменяет Nginx Stream-конфиг, не перезагружает `vpn-manager-stream-relay.service` и не должен запускать sing-box на RU.
 
 ## Ручной render на production
 
 ```bash
 cd /opt/vpn-manager
 
-sudo ENV=production \
+# Используйте сервисного пользователя, чтобы не менять владельца /tmp/*-config.new.json
+SERVICE_USER=$(systemctl show -p User --value vpn-manager)
+sudo -u "$SERVICE_USER" env ENV=production \
   /opt/vpn-manager/venv/bin/python render.py
 ```
 
@@ -455,6 +516,8 @@ sudo ENV=production \
 ```bash
 ls -lh /tmp/*-config.new.json
 ```
+
+Старые конфиги relay/legacy могут оставаться в `/tmp` после смены роли ноды; наличие файла само по себе не означает, что он будет развёрнут.
 
 Проверка всех конфигов:
 
@@ -500,17 +563,25 @@ sudo systemctl status vpn-manager --no-pager
 sudo journalctl -u vpn-manager -n 100 --no-pager
 ```
 
-Локальный `sing-box`:
+Локальный `sing-box` на DE1:
 
 ```bash
 sudo journalctl -u sing-box -n 100 --no-pager
 ```
 
-Удалённый `sing-box`:
+Удалённый `sing-box` на DE2 (и других exit-нодах):
 
 ```bash
 ssh <user>@<host>
 sudo journalctl -u sing-box -n 100 --no-pager
+```
+
+Relay на RU (без sing-box):
+
+```bash
+sudo systemctl status vpn-manager-stream-relay --no-pager
+sudo journalctl -u vpn-manager-stream-relay -n 100 --no-pager
+sudo ss -lntup | grep -E ':(8444|18443)\\b'
 ```
 
 Проверка DNS hijack на exit:
@@ -525,7 +596,7 @@ sudo tcpdump -nn -i eth0 'host 1.1.1.1 and (udp port 53 or tcp port 443)'
 
 Статистика собирается отдельным процессом `stats_collector.py`. Он читает journal `sing-box` локальной ноды напрямую, а удалённых нод — через существующие SSH-подключения из `base.json` + `/etc/vpn-manager.env`.
 
-Для VLESS и Hysteria2 в server-side users автоматически добавляется поле `name`. Благодаря этому collector связывает source IP с конкретным пользователем. Инфраструктурный RU → DE tunnel получает служебное имя `__ru_tunnel` и в пользовательскую статистику не попадает.
+Для VLESS и Hysteria2 в server-side users автоматически добавляется поле `name`. Благодаря этому collector связывает source IP с конкретным пользователем. Служебный пользователь `__ru_tunnel` относится к legacy VLESS-туннелю и не используется в текущем Nginx Stream relay.
 
 Хранение:
 
@@ -574,13 +645,15 @@ ssh <ssh-user>@<host> \
 }
 ```
 
-По умолчанию статистика включена для всех enabled-нод и используется service `sing-box`. Для исключения ноды:
+По умолчанию статистика включена для **всех** enabled-нод и использует service `sing-box` — сам collector пока не определяет роль `relay` автоматически. Для каждой relay-ноды статистику следует выключать явно:
 
 ```json
 "stats": {
   "enabled": false
 }
 ```
+
+Иначе collector попробует читать journal `sing-box` на RU, где он больше не работает. На DE1 при relay-подключениях исходным сетевым адресом будет IP RU, а не реального клиента: при подсчёте активных IP/сетей и leak alerts этот тип трафика нельзя интерпретировать как обычное прямое подключение к DE1.
 
 ### Systemd collector
 
@@ -664,7 +737,12 @@ client-routing.json
 rendered/
 .env
 TODO.md
+*.before-*
+*.orig
+*.rej
 ```
+
+Также проверяйте перед `git add` непокрытые шаблонами резервные копии (например `base.json.bak*`) и временные каталоги: `git status --short` и `git check-ignore <path>`.
 
 Также в Git не должны попадать:
 
